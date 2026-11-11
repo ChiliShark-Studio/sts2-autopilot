@@ -62,6 +62,14 @@ def replay_states(path: Path) -> Iterator[GameState]:
         yield GameState.parse(entry["state"])
 
 
+def llm_decisions(path: Path) -> Iterator[dict[str, Any]]:
+    """Entries where the model made the call, with its prompt/reply attached."""
+    for entry in Journal(path):
+        decision = entry.get("decision") or {}
+        if decision.get("source") == "llm":
+            yield entry
+
+
 def summarize(path: Path) -> dict[str, Any]:
     entries = list(Journal(path))
     screens: dict[str, int] = {}

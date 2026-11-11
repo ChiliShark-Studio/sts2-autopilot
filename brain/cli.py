@@ -73,6 +73,20 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if not path.exists():
         print(f"no such run: {path}", file=sys.stderr)
         return 2
+
+    if args.llm:
+        for entry in replay.llm_decisions(path):
+            decision = entry.get("decision") or {}
+            llm = (decision.get("extra") or {}).get("llm") or {}
+            print(f"[{entry.get('step')}] {entry.get('screen')} / {decision.get('tool')} -> {decision.get('action')}")
+            print(f"  reason : {decision.get('reason')}")
+            print(f"  model  : {llm.get('model')} | usage={llm.get('usage')} | {llm.get('latency_ms')}ms")
+            prompt = str(llm.get("prompt") or "")
+            if prompt:
+                print(f"  prompt : {prompt[:400]}")
+            print()
+        return 0
+
     print(json.dumps(replay.summarize(path), ensure_ascii=False, indent=2))
     return 0
 
@@ -209,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     # 录像汇总
     rep = sub.add_parser("replay", help="汇总一份录像")
     rep.add_argument("file", help="logs/run-*.jsonl")
+    rep.add_argument("--llm", action="store_true", help="只看模型决策（含 prompt/reply）")
     rep.set_defaults(func=cmd_replay)
 
     # 战斗算法基准

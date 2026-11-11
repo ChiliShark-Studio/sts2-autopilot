@@ -189,18 +189,18 @@ class BuildFlowTool:
             return Decision(action=SkipCardReward(), reason="没有可选卡", source=Source.HEURISTIC, tool=self.name)
 
         if self.client is not None:
-            choice, reason = self._llm_card_choice(request)
+            choice, reason, extra = self._llm_card_choice(request)
             if choice is None:
                 # -1 means the model wants to skip; anything invalid -> heuristic.
                 pass
             elif choice == -1:
                 self._pending_card_open = True
                 return Decision(action=SkipCardReward(), reason=reason or "跳过（模型）",
-                                source=Source.LLM, tool=self.name)
+                                source=Source.LLM, tool=self.name, extra=extra)
             else:
                 self._pending_card_open = True
                 return Decision(action=SelectCardReward(choice), reason=reason,
-                                source=Source.LLM, tool=self.name)
+                                source=Source.LLM, tool=self.name, extra=extra)
 
         best = max(cards, key=lambda c: (card_score(c), -c.index))
         score = card_score(best)
@@ -211,7 +211,7 @@ class BuildFlowTool:
         return Decision(action=SelectCardReward(best.index), reason=f"选 {best.name}（{score:.1f}）",
                         source=Source.HEURISTIC, tool=self.name)
 
-    def _llm_card_choice(self, request: DecisionRequest) -> tuple[Optional[int], str]:
+    def _llm_card_choice(self, request: DecisionRequest) -> tuple[Optional[int], str, dict]:
         """Ask the model to pick a card (or -1 to skip). Returns (None, _) on failure."""
         state = request.state
         player = state.player
@@ -235,17 +235,18 @@ class BuildFlowTool:
 
         reply = self.client.json_chat(CARD_SYSTEM_PROMPT, "\n".join(lines))
         if reply is None:
-            return None, ""
+            return None, "", {}
+        extra = {"llm": dict(self.client.last_meta or {})}
         raw = reply.get("choice")
         try:
             choice = int(raw)  # type: ignore[arg-type]
         except (TypeError, ValueError):
-            return None, ""
+            return None, "", {}
         if choice == -1:
-            return -1, str(reply.get("reason") or "跳过")
+            return -1, str(reply.get("reason") or "跳过"), extra
         if choice not in valid:
-            return None, ""
-        return choice, str(reply.get("reason") or "")
+            return None, "", {}
+        return choice, str(reply.get("reason") or ""), extra
 
     def _event(self, request: DecisionRequest) -> Decision:
         """Pick the option with the best gain/cost, never the one that bleeds us.

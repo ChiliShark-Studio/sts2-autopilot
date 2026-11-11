@@ -8,7 +8,7 @@ from pathlib import Path
 
 from brain.contracts import Decision, Source
 from brain.model import GameState
-from brain.replay import Journal, replay_states, summarize
+from brain.replay import Journal, llm_decisions, replay_states, summarize
 
 
 class ReplayTests(unittest.TestCase):
@@ -32,6 +32,21 @@ class ReplayTests(unittest.TestCase):
             stats = summarize(journal.path)
             self.assertEqual(stats["steps"], 2)
             self.assertEqual(stats["sources"]["llm"], 1)
+
+    def test_llm_extra_survives_and_can_be_filtered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = Journal.create(Path(tmp))
+            state = GameState.parse({"state_type": "card_reward", "card_reward": {"cards": []}})
+            llm = Decision(action=None, reason="选完美打击", source=Source.LLM, tool="build_flow",
+                           extra={"llm": {"model": "deepseek-chat", "prompt": "候选…", "usage": {"total_tokens": 42}}})
+            journal.record(state, llm)
+
+            entry = next(iter(journal))
+            self.assertEqual(entry["decision"]["extra"]["llm"]["model"], "deepseek-chat")
+
+            llm_rows = list(llm_decisions(journal.path))
+            self.assertEqual(len(llm_rows), 1)
+            self.assertEqual(llm_rows[0]["decision"]["reason"], "选完美打击")
 
 
 if __name__ == "__main__":

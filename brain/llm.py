@@ -94,6 +94,8 @@ class LLMClient:
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
         self.last_error: Optional[str] = None
+        # Metadata of the most recent successful call, for the journal.
+        self.last_meta: dict[str, Any] = {}
 
     @classmethod
     def from_env(cls) -> Optional["LLMClient"]:
@@ -116,6 +118,7 @@ class LLMClient:
         url = self.config.base_url.rstrip("/") + "/chat/completions"
 
         for attempt in range(self.config.retries + 1):
+            started = time.perf_counter()
             req = urllib.request.Request(
                 url,
                 data=body,
@@ -132,6 +135,13 @@ class LLMClient:
                 parsed = json.loads(content)
                 if not isinstance(parsed, dict):
                     raise ValueError(f"expected object, got {type(parsed).__name__}")
+                self.last_meta = {
+                    "model": data.get("model") or self.config.model,
+                    "usage": data.get("usage"),
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                    "prompt": user,
+                    "reply": content,
+                }
                 return parsed
             except (urllib.error.URLError, urllib.error.HTTPError, KeyError,
                     TimeoutError, ValueError, OSError) as exc:

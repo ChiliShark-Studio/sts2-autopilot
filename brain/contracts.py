@@ -67,18 +67,25 @@ class Decision:
     reason: str = ""
     source: Source = Source.NONE
     tool: str = ""
+    # JSON-safe details for the journal: for LLM decisions this carries the
+    # model name, token usage, the prompt and the raw reply, so a replay can
+    # show what the model actually saw.
+    extra: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_wait(self) -> bool:
         return self.action is None and self.source is Source.NONE
 
     def to_wire(self) -> dict[str, Any]:
-        return {
+        wire = {
             "action": self.action.to_payload() if self.action else None,
             "reason": self.reason,
             "source": self.source.value,
             "tool": self.tool,
         }
+        if self.extra:
+            wire["extra"] = self.extra
+        return wire
 
 
 WAIT = Decision(action=None, reason="等待状态稳定", source=Source.NONE, tool="none")

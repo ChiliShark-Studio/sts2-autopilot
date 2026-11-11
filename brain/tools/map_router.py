@@ -113,6 +113,7 @@ class MapRouterTool:
                         reason=str(reply.get("reason") or "模型未给出理由"),
                         source=Source.LLM,
                         tool=self.name,
+                        extra={"llm": self.client.last_meta},
                     )
 
         index, reason = fallback(state)

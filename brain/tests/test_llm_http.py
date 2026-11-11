@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from brain.llm import LLMClient, LLMConfig
 
 GOOD_BODY = {
+    "model": "test-model",
+    "usage": {"prompt_tokens": 11, "completion_tokens": 7},
     "choices": [{"message": {"content": json.dumps({"choice": 1, "reason": "测试"})}}]
 }
 
@@ -61,12 +63,21 @@ class LLMTransportTests(unittest.TestCase):
         ))
 
     def test_parses_json_content(self):
-        reply = self._client().json_chat("system", "user")
+        client = self._client()
+        reply = client.json_chat("system", "user")
         self.assertEqual(reply, {"choice": 1, "reason": "测试"})
         self.assertEqual(_Handler.seen["path"], "/v1/chat/completions")
         self.assertEqual(_Handler.seen["auth"], "Bearer sk-test")
         self.assertEqual(_Handler.seen["payload"]["response_format"], {"type": "json_object"})
         self.assertEqual(_Handler.seen["payload"]["model"], "test-model")
+
+    def test_captures_metadata_for_the_journal(self):
+        client = self._client()
+        client.json_chat("system", "user prompt")
+        self.assertEqual(client.last_meta["model"], "test-model")
+        self.assertEqual(client.last_meta["usage"]["prompt_tokens"], 11)
+        self.assertEqual(client.last_meta["prompt"], "user prompt")
+        self.assertIn("reason", client.last_meta["reply"])
 
     def test_http_error_returns_none(self):
         _Handler.status = 500

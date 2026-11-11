@@ -55,8 +55,10 @@ data/combat/         从日志里抽出的战斗决策数据集，**入库**，�
 .\sts2.cmd fight-live                              # 接管游戏里当前这场战斗
 .\sts2.cmd run --offline                           # 整局自动（不调 LLM）
 .\sts2.cmd run --offline --one-run                 # 跑完一局就退出，便于逐局分析
-.\sts2.cmd dry --from captures/combat-001.json      # 单状态决策
-python -m unittest discover -s brain/tests -t .     # 62 个离线测试
+.\sts2.cmd dry --from captures/combat-001.json     # 单状态决策
+.\sts2.cmd replay logs\run-*.jsonl                 # 决策分布
+.\sts2.cmd replay logs\run-*.jsonl --llm           # 只看模型决策（含 prompt/reply/token）
+python -m unittest discover -s brain/tests -t .     # 96 个离线测试
 ```
 
 构建 mod：`powershell -ExecutionPolicy Bypass -File .\build.ps1 [-Install]`
