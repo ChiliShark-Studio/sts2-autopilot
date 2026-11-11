@@ -1,0 +1,167 @@
+﻿{
+  "state_type": "monster",
+  "battle": {
+    "round": 1,
+    "turn": "player",
+    "is_play_phase": true,
+    "action_running": false,
+    "action_queue_empty": true,
+    "ready_for_action": true,
+    "enemies": [
+      {
+        "entity_id": "NIBBIT_0",
+        "combat_id": 1,
+        "name": "小啃兽",
+        "hp": 38,
+        "max_hp": 44,
+        "block": 0,
+        "status": [],
+        "intents": [
+          {
+            "type": "Attack",
+            "label": "12",
+            "title": "攻势",
+            "description": "这个敌人将要攻击造成12点伤害。"
+          }
+        ]
+      }
+    ]
+  },
+  "run": {
+    "act": 1,
+    "floor": 1,
+    "ascension": 0
+  },
+  "player": {
+    "character": "铁甲战士",
+    "hp": 80,
+    "max_hp": 80,
+    "block": 0,
+    "energy": 2,
+    "max_energy": 3,
+    "hand": [
+      {
+        "id": "STRIKE_IRONCLAD",
+        "name": "打击",
+        "type": "Attack",
+        "cost": "1",
+        "star_cost": null,
+        "description": "造成6点伤害。",
+        "rarity": "Basic",
+        "is_upgraded": false,
+        "keywords": [],
+        "index": 0,
+        "target_type": "AnyEnemy",
+        "can_play": true,
+        "unplayable_reason": null
+      },
+      {
+        "id": "STRIKE_IRONCLAD",
+        "name": "打击",
+        "type": "Attack",
+        "cost": "1",
+        "star_cost": null,
+        "description": "造成6点伤害。",
+        "rarity": "Basic",
+        "is_upgraded": false,
+        "keywords": [],
+        "index": 1,
+        "target_type": "AnyEnemy",
+        "can_play": true,
+        "unplayable_reason": null
+      },
+      {
+        "id": "DEFEND_IRONCLAD",
+        "name": "防御",
+        "type": "Skill",
+        "cost": "1",
+        "star_cost": null,
+        "description": "获得5点格挡。",
+        "rarity": "Basic",
+        "is_upgraded": false,
+        "keywords": [
+          {
+            "name": "格挡",
+            "description": "在下个回合前，阻挡伤害。"
+          }
+        ],
+        "index": 2,
+        "target_type": "Self",
+        "can_play": true,
+        "unplayable_reason": null
+      },
+      {
+        "id": "STRIKE_IRONCLAD",
+        "name": "打击",
+        "type": "Attack",
+        "cost": "1",
+        "star_cost": null,
+        "description": "造成6点伤害。",
+        "rarity": "Basic",
+        "is_upgraded": false,
+        "keywords": [],
+        "index": 3,
+        "target_type": "AnyEnemy",
+        "can_play": true,
+        "unplayable_reason": null
+      }
+    ],
+    "draw_pile_count": 5,
+    "discard_pile_count": 1,
+    "exhaust_pile_count": 0,
+    "draw_pile": [
+      {
+        "name": "痛击",
+        "cost": "2",
+        "star_cost": null,
+        "description": "造成8点伤害。 给予2层易伤。"
+      },
+      {
+        "name": "防御",
+        "cost": "1",
+        "star_cost": null,
+        "description": "获得5点格挡。"
+      },
+      {
+        "name": "防御",
+        "cost": "1",
+        "star_cost": null,
+        "description": "获得5点格挡。"
+      },
+      {
+        "name": "防御",
+        "cost": "1",
+        "star_cost": null,
+        "description": "获得5点格挡。"
+      },
+      {
+        "name": "打击",
+        "cost": "1",
+        "star_cost": null,
+        "description": "造成6点伤害。"
+      }
+    ],
+    "discard_pile": [
+      {
+        "name": "打击",
+        "cost": "1",
+        "star_cost": null,
+        "description": "造成6点伤害。"
+      }
+    ],
+    "exhaust_pile": [],
+    "gold": 99,
+    "status": [],
+    "relics": [
+      {
+        "id": "BURNING_BLOOD",
+        "name": "燃烧之血",
+        "description": "在战斗结束时，回复6点生命。",
+        "counter": null,
+        "keywords": []
+      }
+    ],
+    "potions": [],
+    "max_potion_slots": 3
+  }
+}
