@@ -8,7 +8,7 @@ the states where a combat decision was made, plus the decision itself.
 
 Output is one JSONL per source run:
 
-    {"step": 42, "fight": "1-13", "act": 1, "floor": 13, "turn": 2,
+    {"step": 42, "fight": "1-13", "ascension": 0, "act": 1, "floor": 13, "turn": 2,
      "enemies": [{"name": "飞蝇菌子", "hp": 49}], "hand": ["打击", "防御"],
      "energy": 3, "hp": 34, "max_hp": 70, "state": {...}, "decision": {...}}
 
@@ -36,6 +36,7 @@ def summarize(state: dict[str, Any]) -> dict[str, Any]:
     floor = run.get("floor")
     return {
         "fight": f"{act}-{floor}",
+        "ascension": run.get("ascension"),
         "act": act,
         "floor": floor,
         "turn": battle.get("round"),
