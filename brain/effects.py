@@ -25,6 +25,8 @@ _DRAW = re.compile(r"抽\s*(\d+)\s*张牌")
 _ENERGY = re.compile(r"获得\s*(\d+)\s*点能量")
 _HEAL = re.compile(r"回复\s*(\d+)\s*点(?:生命|最大生命值)")
 _STRENGTH_GAIN = re.compile(r"获得\s*(\d+)\s*点力量")
+# 应急按钮: "你在接下来的2回合内无法再从卡牌中获得格挡。"
+_NO_BLOCK_TURNS = re.compile(r"接下来的\s*(\d+)\s*回合内无法再从卡牌中获得格挡")
 
 
 def parse_potion(description: str) -> dict[str, int]:
@@ -36,18 +38,14 @@ def parse_potion(description: str) -> dict[str, int]:
     """
     desc = description or ""
 
-    def _first(pattern: re.Pattern[str]) -> int:
-        match = pattern.search(desc)
-        return _int(match.group(1)) if match else 0
-
     return {
-        "damage": _first(_DAMAGE),
-        "block": _first(_BLOCK),
-        "heal": _first(_HEAL),
-        "strength": _first(_STRENGTH_GAIN),
-        "vulnerable": _first(_VULN),
-        "weak": _first(_WEAK),
-        "draw": _first(_DRAW),
+        "damage": _first(_DAMAGE, desc),
+        "block": _first(_BLOCK, desc),
+        "heal": _first(_HEAL, desc),
+        "strength": _first(_STRENGTH_GAIN, desc),
+        "vulnerable": _first(_VULN, desc),
+        "weak": _first(_WEAK, desc),
+        "draw": _first(_DRAW, desc),
         # Card-enhancement potions (e.g. 熔炉的祝福) change the hand itself;
         # their value is computed from card scores, not from a number.
         "upgrade_hand": 1 if ("升级" in desc and "手牌" in desc) else 0,
@@ -61,6 +59,11 @@ def _int(value: Any, default: int = 0) -> int:
         return int(str(value).strip())
     except (TypeError, ValueError):
         return default
+
+
+def _first(pattern: re.Pattern[str], text: str) -> int:
+    match = pattern.search(text)
+    return _int(match.group(1)) if match else 0
 
 
 def _field(card: dict[str, Any], key: str, pattern: re.Pattern[str]) -> int:
@@ -113,6 +116,7 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "weak": _field(card, "weak", _WEAK),
         "draw": _field(card, "draw", _DRAW),
         "energy": _field(card, "energy", _ENERGY),
+        "no_block_turns": _first(_NO_BLOCK_TURNS, desc),
         "unplayable_reason": card.get("unplayable_reason"),
     }
 

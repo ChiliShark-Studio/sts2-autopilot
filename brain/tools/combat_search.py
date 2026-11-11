@@ -47,6 +47,8 @@ POTION_MIN_GAIN = 15.0
 # Fallback upgrade numbers when the bridge does not expose the upgraded card.
 UPGRADE_DAMAGE_BONUS = 3
 UPGRADE_BLOCK_BONUS = 3
+# Score cost per future turn of "cannot gain block from cards" (应急按钮).
+NO_BLOCK_TURN_PENALTY = 8.0
 
 # Powers are keyed by id now; keep the localised names as aliases so older
 # states (and hand-written tests) still resolve.
@@ -60,6 +62,9 @@ _SLIPPERY = {"滑溜", "slippery", "SLIPPERY_POWER"}
 _INTANGIBLE = {"无实体", "intangible", "INTANGIBLE_POWER"}
 # "本回合下一张牌额外打出一次" (复制药水) applies this power to the player.
 _DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
+# Player-side debuffs that change the arithmetic.
+_SHRINK = {"缩小", "shrink", "SHRINK_POWER"}
+_NO_BLOCK = {"不可格挡", "no block", "NO_BLOCK_POWER"}
 
 
 def _power(powers: dict[str, int], aliases: set[str]) -> int:
@@ -119,6 +124,12 @@ class _Sim:
     frail: int = 0
     # 复制药水: the next card played is played twice.
     duplicate_next: int = 0
+    # 虚弱 / 缩小 (attack damage), 不可格挡 (no block from cards).
+    weak: bool = False
+    shrink: bool = False
+    no_block: bool = False
+    # Turns of "no block" this turn's cards would add (downside we must price).
+    no_block_turns: int = 0
 
     @classmethod
     def build(cls, player: Player, battle: Battle) -> "_Sim":
@@ -132,6 +143,9 @@ class _Sim:
             dexterity=_power(player.powers, _DEXTERITY),
             frail=_power(player.powers, _FRAIL),
             duplicate_next=1 if _power(player.powers, _DUPLICATION) else 0,
+            weak=_power(player.powers, _WEAK) > 0,
+            shrink=_power(player.powers, _SHRINK) > 0,
+            no_block=_power(player.powers, _NO_BLOCK) > 0,
             enemies=[
                 _Enemy(
                     entity_id=e.entity_id,
@@ -181,6 +195,10 @@ class _Sim:
                 dmg = card.damage + self.strength
                 if enemy.vulnerable:
                     dmg = int(dmg * 1.5)
+                if self.weak:
+                    dmg = int(dmg * 0.75)
+                if self.shrink:
+                    dmg = int(dmg * 0.70)
                 # Damage-reduction powers cap the hit, per hit (so multi-hit
                 # attacks burn 滑溜 stacks faster -- the sim now sees that).
                 if enemy.intangible:
@@ -195,7 +213,11 @@ class _Sim:
         gain = card.block + self.dexterity
         if self.frail:
             gain = int(gain * 0.75)
+        if self.no_block:
+            gain = 0  # 不可格挡: cards cannot grant block
         self.block += max(0, gain) * multiplier
+        if card.no_block_turns:
+            self.no_block_turns += card.no_block_turns
 
         for enemy in targets:
             enemy.vulnerable += card.vulnerable
@@ -287,6 +309,9 @@ class _Sim:
         score += sum(e.weak for e in alive) * WEAK_VALUE
         score += self.strength * STRENGTH_VALUE
         score += self.dexterity * DEXTERITY_VALUE
+        # 应急按钮's downside lands on later turns; price it here so the search
+        # does not treat 40 block as free.
+        score -= self.no_block_turns * NO_BLOCK_TURN_PENALTY
         return score
 
 

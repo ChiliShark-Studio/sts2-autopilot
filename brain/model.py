@@ -93,6 +93,8 @@ class Card:
     # the heuristic in the simulator".
     damage_up: Optional[int] = None
     block_up: Optional[int] = None
+    # 应急按钮: "接下来的 N 回合内无法再从卡牌中获得格挡"
+    no_block_turns: int = 0
     description: str = ""
 
     @classmethod
@@ -119,6 +121,7 @@ class Card:
             selected=bool(d.get("is_selected")),
             damage_up=d.get("damage_upgraded") if isinstance(d.get("damage_upgraded"), int) else None,
             block_up=d.get("block_upgraded") if isinstance(d.get("block_upgraded"), int) else None,
+            no_block_turns=parsed.get("no_block_turns", 0),
             description=_s(d.get("description")),
         )
 
