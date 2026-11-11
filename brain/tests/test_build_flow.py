@@ -82,5 +82,63 @@ class BuildFlowTests(unittest.TestCase):
         self.assertLess(discard_score(basic_defend), discard_score(rare_engine))
 
 
+class EventTests(unittest.TestCase):
+    """真理石板 bleeds max HP in steps; the policy must not walk the ladder."""
+
+    def _score(self, option, hp=91, max_hp=91):
+        from brain.tools.build_flow import _event_score
+
+        return _event_score(option, hp, max_hp)
+
+    def test_heal_beats_max_hp_cost(self):
+        heal = {"title": "砸碎", "description": "回复20点生命。"}
+        cost = {"title": "解读", "description": "失去3点最大生命。随机升级一张牌。"}
+        self.assertGreater(self._score(heal), self._score(cost))
+
+    def test_refuses_cost_above_the_ratio(self):
+        option = {"title": "继续解读", "description": "失去24点最大生命。随机升级一张牌。"}
+        self.assertIsNone(self._score(option))  # 24 > 15% of 91
+
+    def test_refuses_when_hp_would_drop_to_floor(self):
+        option = {"title": "抛下一切", "description": "失去45点最大生命。升级你的所有卡牌。"}
+        self.assertIsNone(self._score(option, hp=46, max_hp=91))
+
+    def test_cheap_upgrade_is_considered(self):
+        option = {"title": "解读", "description": "失去3点最大生命。随机升级一张牌。"}
+        self.assertIsNotNone(self._score(option))
+
+    def test_falls_back_to_leaving_when_everything_is_dangerous(self):
+        from brain.contracts import DecisionKind, DecisionRequest
+        from brain.model import GameState
+
+        state = {
+            "state_type": "event",
+            "event": {"event_name": "真理石板", "in_dialogue": False, "options": [
+                {"index": 0, "title": "抛下一切", "description": "失去45点最大生命。升级你的所有卡牌。"},
+                {"index": 1, "title": "放弃", "description": "停止阅读文字，就这样离开。"},
+            ]},
+            "player": {"hp": 30, "max_hp": 30},
+        }
+        tool = BuildFlowTool()
+        decision = tool.decide(DecisionRequest(kind=DecisionKind.BUILD,
+                                               state=GameState.parse(state), scene="event"))
+        self.assertEqual(decision.action.option, 1)  # leave, never the 45 HP option
+
+    def test_no_safe_option_and_no_leave_still_exits(self):
+        from brain.contracts import DecisionKind, DecisionRequest
+        from brain.model import GameState
+
+        state = {
+            "state_type": "event",
+            "event": {"event_name": "真理石板", "in_dialogue": False, "options": [
+                {"index": 0, "title": "抛下一切", "description": "失去45点最大生命。升级你的所有卡牌。"},
+            ]},
+            "player": {"hp": 20, "max_hp": 20},
+        }
+        decision = BuildFlowTool().decide(DecisionRequest(kind=DecisionKind.BUILD,
+                                                          state=GameState.parse(state), scene="event"))
+        self.assertIn("危险", decision.reason)
+
+
 if __name__ == "__main__":
     unittest.main()

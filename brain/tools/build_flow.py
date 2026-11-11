@@ -11,6 +11,7 @@ Two facts drive the logic here, both learned from a live run:
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from ..actions import (
@@ -87,6 +88,61 @@ def _shop_card_value(item: dict) -> float:
     return value / cost + RARITY_BONUS.get(item.get("card_rarity") or "", 0.0)
 
 
+_HP_LOSS = re.compile(r"失去\s*(\d+)\s*点(?:最大)?生命")
+_MAX_HP_LOSS = re.compile(r"失去\s*(\d+)\s*点最大生命")
+_HEAL_EVENT = re.compile(r"回复\s*(\d+)\s*点生命")
+_MAX_HP_GAIN = re.compile(r"获得\s*(\d+)\s*点最大生命")
+_LEAVE_HINTS = ("放弃", "离开", "结束", "不读了")
+
+# Never let an event put us below these.
+EVENT_HP_FLOOR = 15
+EVENT_MAX_HP_LOSS_RATIO = 0.15
+EVENT_COST_WEIGHT = 1.5
+EVENT_UPGRADE_WEIGHT = 4.0
+EVENT_CURSE_WEIGHT = 8.0
+
+
+def _first_int(pattern: re.Pattern[str], text: str) -> int:
+    match = pattern.search(text)
+    return int(match.group(1)) if match else 0
+
+
+def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
+    """Score an event option, or None when it is too dangerous to take.
+
+    Events are where the bot bled out: 真理石板 charges escalating max-HP costs
+    (3, 6, 12, 24, 45) and the old policy just always picked index 0.
+    """
+    desc = option.get("description") or ""
+    title = option.get("title") or ""
+    text = f"{title} {desc}"
+
+    if any(hint in text for hint in _LEAVE_HINTS):
+        return 0.0
+
+    max_hp_loss = _first_int(_MAX_HP_LOSS, text)
+    hp_loss = _first_int(_HP_LOSS, text) - max_hp_loss
+    heal = _first_int(_HEAL_EVENT, text)
+    max_hp_gain = _first_int(_MAX_HP_GAIN, text)
+    curse = 1 if "诅咒" in text else 0
+    upgrades = 2 if "所有" in text and "升级" in text else (1 if "升级" in text else 0)
+
+    # Hard safety gates.
+    if hp - hp_loss <= EVENT_HP_FLOOR:
+        return None
+    if max_hp_loss and max_hp - max_hp_loss < max_hp * 0.5:
+        return None
+    if max_hp_loss and max_hp_loss > max_hp * EVENT_MAX_HP_LOSS_RATIO:
+        return None
+
+    return (
+        (heal + max_hp_gain) * 1.5
+        + upgrades * EVENT_UPGRADE_WEIGHT
+        - (hp_loss + max_hp_loss) * EVENT_COST_WEIGHT
+        - curse * EVENT_CURSE_WEIGHT
+    )
+
+
 class BuildFlowTool:
     name = "build_flow"
 
@@ -126,6 +182,11 @@ class BuildFlowTool:
                         source=Source.HEURISTIC, tool=self.name)
 
     def _event(self, request: DecisionRequest) -> Decision:
+        """Pick the option with the best gain/cost, never the one that bleeds us.
+
+        真理石板 charges 3/6/12/24/45 max HP for upgrades; the old "always index
+        0" rule walked that ladder down to 1 HP.
+        """
         event = request.state.raw.get("event") or {}
         if event.get("in_dialogue"):
             return Decision(action=AdvanceDialogue(), reason="推进对话",
@@ -135,11 +196,30 @@ class BuildFlowTool:
         if not options:
             # Events rebuild their buttons between pages; empty is transient.
             return WAIT
-        pick = options[0]
+
+        player = request.state.player
+        scored: list[tuple[float, int, dict]] = []
+        for option in options:
+            score = _event_score(option, player.hp, player.max_hp)
+            if score is None:
+                continue
+            scored.append((score, int(option.get("index", 0)), option))
+
         name = event.get("event_name") or "事件"
-        return Decision(action=ChooseEventOption(int(pick.get("index", 0))),
-                        reason=f"{name}: {pick.get('title', '')}",
-                        source=Source.SCRIPT, tool=self.name)
+        if not scored:
+            leave = next(
+                (o for o in options
+                 if any(h in f"{o.get('title', '')} {o.get('description', '')}" for h in _LEAVE_HINTS)),
+                options[-1],
+            )
+            return Decision(action=ChooseEventOption(int(leave.get("index", 0))),
+                            reason=f"{name}: 都太危险，离开（{leave.get('title', '')}）",
+                            source=Source.HEURISTIC, tool=self.name)
+
+        score, index, pick = max(scored, key=lambda item: (item[0], -item[1]))
+        return Decision(action=ChooseEventOption(index),
+                        reason=f"{name}: {pick.get('title', '')}（{score:+.1f}）",
+                        source=Source.HEURISTIC, tool=self.name)
 
     def _rest(self, request: DecisionRequest) -> Decision:
         """Rest site: heal when hurt, otherwise upgrade. Also handles 'proceed'."""
