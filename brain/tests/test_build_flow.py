@@ -140,5 +140,31 @@ class EventTests(unittest.TestCase):
         self.assertIn("危险", decision.reason)
 
 
+class LLMCardPickTests(unittest.TestCase):
+    def test_llm_choice_is_used(self):
+        from brain.llm import make_mock_client
+
+        tool = BuildFlowTool(make_mock_client({"choice": 2, "reason": "补输出"}))
+        decision = tool.decide(request(REWARD_STATE, "card_reward"))
+        self.assertIsInstance(decision.action, SelectCardReward)
+        self.assertEqual(decision.action.index, 2)
+        self.assertEqual(decision.source.value, "llm")
+
+    def test_llm_skip_is_respected(self):
+        from brain.llm import make_mock_client
+
+        tool = BuildFlowTool(make_mock_client({"choice": -1, "reason": "都不想要"}))
+        decision = tool.decide(request(REWARD_STATE, "card_reward"))
+        self.assertIsInstance(decision.action, SkipCardReward)
+
+    def test_invalid_choice_falls_back_to_heuristic(self):
+        from brain.llm import make_mock_client
+
+        tool = BuildFlowTool(make_mock_client({"choice": 99, "reason": "瞎选"}))
+        decision = tool.decide(request(REWARD_STATE, "card_reward"))
+        self.assertEqual(decision.source.value, "heuristic")
+        self.assertIsInstance(decision.action, SelectCardReward)
+
+
 if __name__ == "__main__":
     unittest.main()

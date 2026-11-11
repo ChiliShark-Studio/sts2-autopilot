@@ -34,7 +34,7 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
     return GameAgent(
         Bridge(base),
         map_agent=MapAgent(MapRouterTool(client)),
-        build_agent=BuildAgent(BuildFlowTool()),
+        build_agent=BuildAgent(BuildFlowTool(client)),
         combat_agent=CombatAgent(CombatSearchTool()),
         select_agent=SelectAgent(SelectTool()),
         journal=journal,

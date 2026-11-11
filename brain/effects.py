@@ -51,6 +51,8 @@ def parse_potion(description: str) -> dict[str, int]:
         # Card-enhancement potions (e.g. 熔炉的祝福) change the hand itself;
         # their value is computed from card scores, not from a number.
         "upgrade_hand": 1 if ("升级" in desc and "手牌" in desc) else 0,
+        # Duplication: "本回合，你打出的下一张牌会额外打出一次。"
+        "duplicate_next": 1 if ("额外打出一次" in desc or "打出两次" in desc) else 0,
     }
 
 

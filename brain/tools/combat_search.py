@@ -58,6 +58,8 @@ _FRAIL = {"脆弱", "frail", "Frail", "FRAIL_POWER"}
 # Damage-reduction powers: the two that made the floor-17 review pointless.
 _SLIPPERY = {"滑溜", "slippery", "SLIPPERY_POWER"}
 _INTANGIBLE = {"无实体", "intangible", "INTANGIBLE_POWER"}
+# "本回合下一张牌额外打出一次" (复制药水) applies this power to the player.
+_DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
 
 
 def _power(powers: dict[str, int], aliases: set[str]) -> int:
@@ -115,6 +117,8 @@ class _Sim:
     strength: int = 0
     dexterity: int = 0
     frail: int = 0
+    # 复制药水: the next card played is played twice.
+    duplicate_next: int = 0
 
     @classmethod
     def build(cls, player: Player, battle: Battle) -> "_Sim":
@@ -127,6 +131,7 @@ class _Sim:
             strength=_power(player.powers, _STRENGTH),
             dexterity=_power(player.powers, _DEXTERITY),
             frail=_power(player.powers, _FRAIL),
+            duplicate_next=1 if _power(player.powers, _DUPLICATION) else 0,
             enemies=[
                 _Enemy(
                     entity_id=e.entity_id,
@@ -167,7 +172,9 @@ class _Sim:
         self.hand.pop(pos)
 
         targets = [self.enemies[target]] if target is not None and target < len(self.enemies) else []
-        for _ in range(max(1, card.hits)):
+        multiplier = 2 if self.duplicate_next else 1
+        self.duplicate_next = 0
+        for _ in range(max(1, card.hits) * multiplier):
             for enemy in targets:
                 if not enemy.alive:
                     continue
@@ -188,7 +195,7 @@ class _Sim:
         gain = card.block + self.dexterity
         if self.frail:
             gain = int(gain * 0.75)
-        self.block += max(0, gain)
+        self.block += max(0, gain) * multiplier
 
         for enemy in targets:
             enemy.vulnerable += card.vulnerable
@@ -245,6 +252,8 @@ class _Sim:
             # Card-enhancement potions change the hand itself; the re-plan then
             # prices the upgrade through normal card scoring.
             self.hand = [_upgraded(c) for c in self.hand]
+        if eff.get("duplicate_next"):
+            self.duplicate_next = 1
         if eff.get("draw"):
             self.energy += 0  # drawing is not modelled; keep the potion neutral
         for enemy in targets:
@@ -420,7 +429,8 @@ class CombatSearchTool:
                     best = (delta, potion, target_id, "斩杀")
                 continue
 
-            offensive = eff["damage"] or eff["strength"] or eff["vulnerable"] or eff["weak"] or eff["upgrade_hand"]
+            offensive = (eff["damage"] or eff["strength"] or eff["vulnerable"]
+                         or eff["weak"] or eff["upgrade_hand"] or eff["duplicate_next"])
             if offensive and hp_ratio < 0.6 and delta >= POTION_MIN_GAIN:
                 if best is None or delta > best[0]:
                     best = (delta, potion, target_id, "增伤")

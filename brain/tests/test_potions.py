@@ -113,6 +113,51 @@ class CardEnhancementTests(unittest.TestCase):
         self.assertIn("熔炉的祝福", decision.reason)
 
 
+def duplicate_potion(slot=0):
+    return {"slot": slot, "id": "DUPLICATION_POTION", "name": "复制药水",
+            "description": "本回合，你打出的下一张牌会额外打出一次。",
+            "target_type": "Self", "can_use_in_combat": True}
+
+
+class DuplicationTests(unittest.TestCase):
+    def test_parse_flags_duplicate(self):
+        from brain.effects import parse_potion
+
+        eff = parse_potion("本回合，你打出的下一张牌会额外打出一次。")
+        self.assertEqual(eff["duplicate_next"], 1)
+
+    def test_next_card_is_played_twice(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        parsed = GameState.parse(state(enemy_hp=40, hand=three_strikes()))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.apply_potion({"duplicate_next": 1})
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 28)  # 6 damage twice
+
+    def test_power_from_state_also_doubles(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        raw = state(enemy_hp=40, hand=three_strikes())
+        raw["player"]["status"] = [{"id": "DUPLICATION_POWER", "name": "复制", "amount": 1}]
+        parsed = GameState.parse(raw)
+        sim = _Sim.build(parsed.player, parsed.battle)
+        self.assertEqual(sim.duplicate_next, 1)
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 28)
+
+    def test_used_when_it_enables_lethal(self):
+        # One strike deals 6 vs 12 HP: without doubling it is not lethal.
+        hand = [{"index": 0, "name": "打击", "cost": "1", "damage": 6,
+                 "hits": 1, "target_type": "AnyEnemy"}]
+        decision = decide_state(state(enemy_hp=12, hp=30, hand=hand,
+                                      potions=[duplicate_potion()]))
+        self.assertEqual(decision.action.kind, "use_potion")
+        self.assertIn("复制药水", decision.reason)
+
+
 class PotionTests(unittest.TestCase):
     def test_no_potion_plays_a_card(self):
         decision = decide_state(state())

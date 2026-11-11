@@ -62,6 +62,18 @@ SHOP_RESERVE = 40
 SHOP_CARD_THRESHOLD = 3.0
 
 
+CARD_SYSTEM_PROMPT = """你是《杀戮尖塔2》的构筑助手。为当前卡组从卡牌奖励里选一张，或跳过。
+
+判断原则：
+- 卡组质量比数量重要：没有明显补强的牌就跳过（choice=-1）。
+- 缺格挡补格挡，缺输出补输出；基础牌已经够多时优先功能牌。
+- 纯数值小、与卡组无配合的牌不要拿。
+- 缩放牌（伤害随牌组变化）、能力牌通常比同费用的白板强。
+
+只输出 JSON：{"choice": <index 或 -1>, "reason": "<40字内>"}
+"""
+
+
 def _card_dict_value(card: dict) -> float:
     """Value of a raw card dict (bundle entries only carry the text stats)."""
     from ..effects import parse_card
@@ -146,7 +158,10 @@ def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
 class BuildFlowTool:
     name = "build_flow"
 
-    def __init__(self) -> None:
+    def __init__(self, client=None) -> None:
+        # Optional LLM for card picks: the heuristic cannot price scaling cards
+        # (完美打击, 破灭) and therefore kept taking bland stat cards like 铁斩波.
+        self.client = client
         self._pending_card_open = False
         self._shop_bought = False
 
@@ -172,6 +187,21 @@ class BuildFlowTool:
         cards = request.state.card_reward
         if not cards:
             return Decision(action=SkipCardReward(), reason="没有可选卡", source=Source.HEURISTIC, tool=self.name)
+
+        if self.client is not None:
+            choice, reason = self._llm_card_choice(request)
+            if choice is None:
+                # -1 means the model wants to skip; anything invalid -> heuristic.
+                pass
+            elif choice == -1:
+                self._pending_card_open = True
+                return Decision(action=SkipCardReward(), reason=reason or "跳过（模型）",
+                                source=Source.LLM, tool=self.name)
+            else:
+                self._pending_card_open = True
+                return Decision(action=SelectCardReward(choice), reason=reason,
+                                source=Source.LLM, tool=self.name)
+
         best = max(cards, key=lambda c: (card_score(c), -c.index))
         score = card_score(best)
         if score < SKIP_THRESHOLD:
@@ -180,6 +210,42 @@ class BuildFlowTool:
         self._pending_card_open = True
         return Decision(action=SelectCardReward(best.index), reason=f"选 {best.name}（{score:.1f}）",
                         source=Source.HEURISTIC, tool=self.name)
+
+    def _llm_card_choice(self, request: DecisionRequest) -> tuple[Optional[int], str]:
+        """Ask the model to pick a card (or -1 to skip). Returns (None, _) on failure."""
+        state = request.state
+        player = state.player
+        candidates = state.card_reward
+        valid = {c.index for c in candidates}
+
+        deck = "、".join(c.name for c in player.deck[:40]) or "空"
+        lines = [
+            f"当前：{player.character} 第{state.run.floor}层 血量{player.hp}/{player.max_hp} 金币{player.gold}",
+            f"卡组（{len(player.deck)}张）：{deck}",
+            "",
+            "候选卡牌：",
+        ]
+        for card in candidates:
+            lines.append(
+                f"- index={card.index} {card.name} | 费用{card.cost} | {card.type} | "
+                f"{card.rarity} | {card.description}"
+            )
+        lines.append("")
+        lines.append('只输出 JSON：{"choice": <index 或 -1 表示跳过>, "reason": "<40字内>"}')
+
+        reply = self.client.json_chat(CARD_SYSTEM_PROMPT, "\n".join(lines))
+        if reply is None:
+            return None, ""
+        raw = reply.get("choice")
+        try:
+            choice = int(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None, ""
+        if choice == -1:
+            return -1, str(reply.get("reason") or "跳过")
+        if choice not in valid:
+            return None, ""
+        return choice, str(reply.get("reason") or "")
 
     def _event(self, request: DecisionRequest) -> Decision:
         """Pick the option with the best gain/cost, never the one that bleeds us.
