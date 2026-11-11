@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable
 
-COMBAT_SCREENS = {"monster", "hand_select", "card_select"}
+COMBAT_SCREENS = {"monster", "elite", "boss", "hand_select", "card_select"}
 
 
 def summarize(state: dict[str, Any]) -> dict[str, Any]:

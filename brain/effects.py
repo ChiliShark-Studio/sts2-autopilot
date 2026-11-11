@@ -23,6 +23,35 @@ _VULN = re.compile(r"给予\s*(\d+)\s*层易伤")
 _WEAK = re.compile(r"给予\s*(\d+)\s*层虚弱")
 _DRAW = re.compile(r"抽\s*(\d+)\s*张牌")
 _ENERGY = re.compile(r"获得\s*(\d+)\s*点能量")
+_HEAL = re.compile(r"回复\s*(\d+)\s*点(?:生命|最大生命值)")
+_STRENGTH_GAIN = re.compile(r"获得\s*(\d+)\s*点力量")
+
+
+def parse_potion(description: str) -> dict[str, int]:
+    """Turn a potion's rendered text into numbers.
+
+    Potions only expose a description string, so this is the same stopgap as
+    card parsing: good enough for the damage/block/heal potions that matter for
+    survival and finishing, and 0 for anything fancier.
+    """
+    desc = description or ""
+
+    def _first(pattern: re.Pattern[str]) -> int:
+        match = pattern.search(desc)
+        return _int(match.group(1)) if match else 0
+
+    return {
+        "damage": _first(_DAMAGE),
+        "block": _first(_BLOCK),
+        "heal": _first(_HEAL),
+        "strength": _first(_STRENGTH_GAIN),
+        "vulnerable": _first(_VULN),
+        "weak": _first(_WEAK),
+        "draw": _first(_DRAW),
+        # Card-enhancement potions (e.g. 熔炉的祝福) change the hand itself;
+        # their value is computed from card scores, not from a number.
+        "upgrade_hand": 1 if ("升级" in desc and "手牌" in desc) else 0,
+    }
 
 
 def _int(value: Any, default: int = 0) -> int:
@@ -71,6 +100,9 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "cost": _int(card.get("cost"), 1),
         "type": (card.get("type") or "").lower(),
         "target_type": card.get("target_type") or "",
+        # Star cost is the Regent's resource; we do not model stars, so a card
+        # that costs them must be treated as unplayable rather than attempted.
+        "star_cost": _int(card.get("star_cost"), 0),
         "can_play": bool(card.get("can_play", True)),
         "damage": damage,
         "hits": hits,

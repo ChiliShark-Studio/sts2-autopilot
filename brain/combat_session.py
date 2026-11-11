@@ -17,7 +17,7 @@ from .model import Screen
 from .ports import GamePort
 from .transport import BridgeError
 
-COMBAT_SCREENS = {Screen.COMBAT, Screen.HAND_SELECT, Screen.CARD_SELECT}
+COMBAT_SCREENS = {Screen.COMBAT, Screen.ELITE, Screen.BOSS, Screen.HAND_SELECT, Screen.CARD_SELECT}
 
 
 class NotInCombat(RuntimeError):

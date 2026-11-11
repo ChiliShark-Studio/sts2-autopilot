@@ -28,6 +28,8 @@ class Screen(str, Enum):
     MENU = "menu"
     MAP = "map"
     COMBAT = "monster"
+    ELITE = "elite"
+    BOSS = "boss"
     REWARDS = "rewards"
     CARD_REWARD = "card_reward"
     EVENT = "event"
@@ -37,6 +39,7 @@ class Screen(str, Enum):
     TREASURE = "treasure"
     HAND_SELECT = "hand_select"
     CARD_SELECT = "card_select"
+    BUNDLE_SELECT = "bundle_select"
     GAME_OVER = "game_over"
     UNKNOWN = "unknown"
 
@@ -86,6 +89,10 @@ class Card:
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
+    # Upgraded numbers, when the bridge provides them. None means "unknown, use
+    # the heuristic in the simulator".
+    damage_up: Optional[int] = None
+    block_up: Optional[int] = None
     description: str = ""
 
     @classmethod
@@ -99,7 +106,7 @@ class Card:
             cost=parsed["cost"],
             type=parsed["type"],
             target_type=parsed["target_type"],
-            can_play=parsed["can_play"],
+            can_play=parsed["can_play"] and parsed["star_cost"] <= 0,
             damage=parsed["damage"],
             hits=parsed["hits"],
             block=parsed["block"],
@@ -110,6 +117,8 @@ class Card:
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),
+            damage_up=d.get("damage_upgraded") if isinstance(d.get("damage_upgraded"), int) else None,
+            block_up=d.get("block_upgraded") if isinstance(d.get("block_upgraded"), int) else None,
             description=_s(d.get("description")),
         )
 
@@ -164,7 +173,13 @@ class Enemy:
             max_hp=_i(d.get("max_hp"), _i(d.get("hp"))),
             block=_i(d.get("block")),
             intents=tuple(Intent.parse(x) for x in _l(d.get("intents"))),
-            powers={_s(p.get("name")): _i(p.get("amount")) for p in _l(d.get("status")) if isinstance(p, dict)},
+            # Key by stable id, not localised name: the sim must keep working
+            # when the game runs in another language.
+            powers={
+                _s(p.get("id") or p.get("name")): _i(p.get("amount"))
+                for p in _l(d.get("status"))
+                if isinstance(p, dict)
+            },
         )
 
     @property
@@ -177,6 +192,32 @@ class Enemy:
 
 
 @dataclass(frozen=True)
+class Potion:
+    slot: int = 0
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    target_type: str = ""
+    usable: bool = True
+
+    @classmethod
+    def parse(cls, raw: Any, index: int = 0) -> "Potion":
+        d = _d(raw)
+        return cls(
+            slot=_i(d.get("slot"), index),
+            id=_s(d.get("id")),
+            name=_s(d.get("name")),
+            description=_s(d.get("description")),
+            target_type=_s(d.get("target_type")),
+            usable=bool(d.get("can_use_in_combat", True)),
+        )
+
+    @property
+    def needs_enemy_target(self) -> bool:
+        return self.target_type.lower().endswith("enemy")
+
+
+@dataclass(frozen=True)
 class Player:
     character: str = ""
     hp: int = 0
@@ -185,8 +226,9 @@ class Player:
     energy: int = 0
     max_energy: int = 3
     gold: int = 0
+    max_potion_slots: int = 3
     relics: tuple[str, ...] = ()
-    potions: tuple[dict[str, Any], ...] = ()
+    potions: tuple[Potion, ...] = ()
     deck: tuple[Card, ...] = ()
     powers: dict[str, int] = field(default_factory=dict)
 
@@ -201,11 +243,12 @@ class Player:
             energy=_i(d.get("energy")),
             max_energy=_i(d.get("max_energy"), 3),
             gold=_i(d.get("gold")),
+            max_potion_slots=_i(d.get("max_potion_slots"), 3),
             relics=tuple(_s(r.get("name") or r.get("id")) for r in _l(d.get("relics")) if isinstance(r, dict)),
-            potions=tuple(p for p in _l(d.get("potions")) if isinstance(p, dict)),
+            potions=tuple(Potion.parse(p, i) for i, p in enumerate(_l(d.get("potions"))) if isinstance(p, dict)),
             deck=tuple(Card.parse(c, i) for i, c in enumerate(_l(d.get("deck")))),
             powers={
-                _s(p.get("name") or p.get("id")): _i(p.get("amount"))
+                _s(p.get("id") or p.get("name")): _i(p.get("amount"))
                 for p in _l(d.get("status"))
                 if isinstance(p, dict)
             },
@@ -385,7 +428,7 @@ class GameState:
     # -- convenience predicates used by the agent -------------------------- #
     @property
     def in_combat(self) -> bool:
-        return self.screen is Screen.COMBAT and self.battle is not None
+        return self.screen in (Screen.COMBAT, Screen.ELITE, Screen.BOSS) and self.battle is not None
 
     @property
     def is_over(self) -> bool:

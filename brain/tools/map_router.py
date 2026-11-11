@@ -45,7 +45,7 @@ def build_prompt(state: GameState) -> str:
             "gold": p.gold,
             "character": p.character,
             "relics": list(p.relics),
-            "potions": [str(x.get("name")) for x in p.potions],
+            "potions": [p.name for p in p.potions],
             "boss": map_state.boss if map_state else "",
         }, ensure_ascii=False),
         "",

@@ -32,7 +32,8 @@ def _print_decision(step: int, decision) -> None:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """整局自动跑：地图、战斗、奖励、选牌都由 agent 自己决定。"""
-    agent = build_agent(args.base, offline=args.offline, journal_dir=Path("logs"))
+    agent = build_agent(args.base, offline=args.offline, journal_dir=Path("logs"),
+                        stop_after_run=args.one_run)
     try:
         outcome = agent.run(max_steps=args.steps, settle=args.settle, on_step=_print_decision)
     except (UnsupportedScreen, BridgeError) as exc:
@@ -194,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--steps", type=int, default=400, help="最多走多少步")
     run.add_argument("--settle", type=float, default=0.6, help="每步之间等多久（秒）")
     run.add_argument("--offline", action="store_true", help="不创建 LLM 客户端")
+    run.add_argument("--one-run", action="store_true",
+                     help="跑完一局就退出（不自动重开），方便逐局分析")
     run.set_defaults(func=cmd_run)
 
     # 单次决策

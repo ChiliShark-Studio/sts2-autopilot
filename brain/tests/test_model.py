@@ -61,6 +61,18 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(card.hits, 2)
         self.assertEqual(state.battle.incoming, 14)  # 7 x 2
 
+    def test_star_cost_cards_are_not_playable(self):
+        """Regent cards cost stars, which we do not model -- never attempt them."""
+        state = GameState.parse({
+            "state_type": "monster",
+            "battle": {"turn": "player", "ready_for_action": True, "enemies": []},
+            "player": {"hp": 50, "max_hp": 80, "energy": 3, "hand": [
+                {"index": 0, "name": "陨星", "cost": "0", "star_cost": "2", "damage": 8},
+            ]},
+        })
+        assert state.battle is not None
+        self.assertFalse(state.battle.hand[0].can_play)
+
     def test_defaults_are_total(self):
         state = GameState.parse({})
         self.assertIs(state.screen, Screen.UNKNOWN)

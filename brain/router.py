@@ -9,7 +9,8 @@ from .model import GameState, Screen
 
 # Screens owned by the build unit: deck construction and everything that is not
 # combat, routing or the menu.
-BUILD_SCENES = frozenset({"card_reward", "rewards", "shop", "event", "rest", "rest_site", "treasure"})
+BUILD_SCENES = frozenset({"card_reward", "rewards", "shop", "event", "rest", "rest_site",
+                          "treasure", "bundle_select"})
 
 
 def route(state: GameState) -> Optional[DecisionRequest]:
@@ -19,7 +20,7 @@ def route(state: GameState) -> Optional[DecisionRequest]:
     lifecycle.  Unknown screens also return None so the loop can stop instead
     of inventing a policy.
     """
-    if state.screen is Screen.COMBAT:
+    if state.screen in (Screen.COMBAT, Screen.ELITE, Screen.BOSS):
         return DecisionRequest(kind=DecisionKind.COMBAT, state=state)
     if state.screen is Screen.MAP:
         return DecisionRequest(kind=DecisionKind.MAP, state=state)

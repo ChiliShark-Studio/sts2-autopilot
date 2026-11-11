@@ -55,6 +55,8 @@ class PlayCard(Action):
             raise ActionError("combat not ready for action")
         if self.card.index < 0 or self.card.index >= len(state.battle.hand):
             raise ActionError(f"hand index {self.card.index} out of range")
+        if not self.card.can_play:
+            raise ActionError(f"{self.card.name} is not playable right now")
         if self.card.cost > state.player.energy:
             raise ActionError(f"{self.card.name} costs {self.card.cost} > energy {state.player.energy}")
 
@@ -289,6 +291,32 @@ class AdvanceDialogue(Action):
 
     def describe(self) -> str:
         return "推进对话"
+
+
+@dataclass(frozen=True)
+class SelectBundle(Action):
+    index: int = 0
+
+    def __init__(self, index: int) -> None:
+        object.__setattr__(self, "kind", "select_bundle")
+        object.__setattr__(self, "index", index)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"action": "select_bundle", "index": self.index}
+
+    def describe(self) -> str:
+        return f"选择卡牌包 {self.index}"
+
+
+@dataclass(frozen=True)
+class ConfirmBundleSelection(Action):
+    kind: str = "confirm_bundle_selection"
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"action": "confirm_bundle_selection"}
+
+    def describe(self) -> str:
+        return "确认卡牌包"
 
 
 @dataclass(frozen=True)

@@ -18,8 +18,10 @@ from ..actions import (
     ChooseEventOption,
     ClaimReward,
     ClaimTreasureRelic,
+    ConfirmBundleSelection,
     Proceed,
     RestOption,
+    SelectBundle,
     SelectCardReward,
     ShopPurchase,
     SkipCardReward,
@@ -59,6 +61,17 @@ SHOP_RESERVE = 40
 SHOP_CARD_THRESHOLD = 3.0
 
 
+def _card_dict_value(card: dict) -> float:
+    """Value of a raw card dict (bundle entries only carry the text stats)."""
+    from ..effects import parse_card
+
+    parsed = parse_card(card)
+    cost = max(1, parsed["cost"])
+    value = parsed["damage"] * parsed["hits"] + parsed["block"] * 0.9
+    value += parsed["vulnerable"] * 3 + parsed["weak"] * 2 + parsed["draw"] * 2
+    return value / cost + RARITY_BONUS.get(card.get("rarity") or "", 0.0)
+
+
 def _shop_card_value(item: dict) -> float:
     """Score a shop card from its rendered description (no numeric fields there)."""
     from ..effects import parse_card
@@ -94,6 +107,8 @@ class BuildFlowTool:
             return self._treasure(request)
         if request.scene == "shop":
             return self._shop(request)
+        if request.scene == "bundle_select":
+            return self._bundle(request)
         # shop / treasure: deliberately unimplemented.
         return Decision(action=None, reason=f"未实现的界面: {request.scene}", source=Source.NONE, tool=self.name)
 
@@ -188,19 +203,51 @@ class BuildFlowTool:
         self._shop_bought = False
         return Decision(action=Proceed(), reason="没有值得买的，离开", source=Source.SCRIPT, tool=self.name)
 
+    def _bundle(self, request: DecisionRequest) -> Decision:
+        """Pick the card bundle with the best total value, then confirm."""
+        bundle = request.state.raw.get("bundle_select") or {}
+        if bundle.get("can_confirm") or bundle.get("preview_showing"):
+            return Decision(action=ConfirmBundleSelection(), reason="确认卡牌包",
+                            source=Source.SCRIPT, tool=self.name)
+
+        bundles = [b for b in (bundle.get("bundles") or []) if isinstance(b, dict)]
+        if not bundles:
+            return WAIT
+
+        def value(item: dict) -> float:
+            return sum(_card_dict_value(c) for c in (item.get("cards") or []) if isinstance(c, dict))
+
+        best = max(bundles, key=value)
+        return Decision(action=SelectBundle(int(best.get("index", 0))),
+                        reason=f"选价值最高的一包（{value(best):.1f}）",
+                        source=Source.HEURISTIC, tool=self.name)
+
     def _rewards(self, request: DecisionRequest) -> Decision:
         raw = request.state.raw.get("rewards") or {}
         items = request.state.rewards
         can_proceed = bool(raw.get("can_proceed"))
-        non_card = [r for r in items if r.type != "card"]
-        if non_card:
-            return Decision(action=ClaimReward(non_card[0].index), reason=f"领取 {non_card[0].type}",
+        player = request.state.player
+        potions_full = len(player.potions) >= player.max_potion_slots
+
+        # A potion reward cannot be claimed with full slots; re-claiming it is
+        # how the loop got stuck, so treat it as unclaimable and move on.
+        claimable = [
+            r for r in items
+            if r.type != "card" and not (r.type == "potion" and potions_full)
+        ]
+        if claimable:
+            return Decision(action=ClaimReward(claimable[0].index), reason=f"领取 {claimable[0].type}",
                             source=Source.SCRIPT, tool=self.name)
-        if items:
+
+        card_items = [r for r in items if r.type == "card"]
+        if card_items:
             if self._pending_card_open and can_proceed:
                 self._pending_card_open = False
-                return Decision(action=Proceed(), reason="卡牌奖励已处理，离开", source=Source.SCRIPT, tool=self.name)
-            return Decision(action=ClaimReward(items[0].index), reason="打开选牌", source=Source.SCRIPT, tool=self.name)
+                return Decision(action=Proceed(), reason="卡牌奖励已处理，离开",
+                                source=Source.SCRIPT, tool=self.name)
+            return Decision(action=ClaimReward(card_items[0].index), reason="打开选牌",
+                            source=Source.SCRIPT, tool=self.name)
+
         if can_proceed:
             return Decision(action=Proceed(), reason="离开奖励界面", source=Source.SCRIPT, tool=self.name)
         return Decision(action=None, reason="奖励界面无可执行动作", source=Source.NONE, tool=self.name)

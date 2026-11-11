@@ -29,10 +29,12 @@ class UnsupportedScreen(Exception):
 
 class GameAgent:
     def __init__(self, port: GamePort, *, map_agent, build_agent, combat_agent,
-                 select_agent=None, journal=None) -> None:
+                 select_agent=None, journal=None, stop_after_run: bool = False) -> None:
         self.port = port
         self.journal = journal
+        self.stop_after_run = stop_after_run
         self._character_picked = False
+        self._left_menu = False
         self._agents = {
             DecisionKind.MAP: map_agent,
             DecisionKind.BUILD: build_agent,
@@ -44,6 +46,10 @@ class GameAgent:
     # -- decision ---------------------------------------------------------- #
     def decide(self, state: GameState) -> Decision:
         if state.screen is Screen.GAME_OVER:
+            if self.stop_after_run:
+                # One run per process: stop here so the journal can be analysed
+                # before the next attempt overwrites the context.
+                raise StopRun("run finished")
             # A finished run is lifecycle, not a decision: walk back to the main
             # menu when the game offers it, so a long-running agent can restart.
             options = [str(o) for o in ((state.raw.get("game_over") or {}).get("options") or [])]
@@ -52,7 +58,14 @@ class GameAgent:
                                 source=Source.SCRIPT, tool="menu")
             raise StopRun("game over")
         if state.screen is Screen.MENU:
+            # The game often goes straight back to the main menu after a death,
+            # so "we were in a run and are at the menu again" is the reliable
+            # end-of-run signal when --one-run is set.
+            if self.stop_after_run and self._left_menu:
+                raise StopRun("run ended (back at menu)")
             return self._menu(state)
+
+        self._left_menu = True
 
         request = route(state)
         if request is None:
@@ -75,13 +88,25 @@ class GameAgent:
             elif isinstance(item, dict) and item.get("enabled", True):
                 options.append(str(item.get("name")))
 
+        # Epoch unlocks open the Timeline; leaving it un-revealed hides
+        # "singleplayer" from the main menu, so advance through it first.
+        if screen == "timeline":
+            for preferred in ("advance", "back"):
+                if preferred in options:
+                    return Decision(action=MenuSelect(preferred), reason=f"Timeline: {preferred}",
+                                    source=Source.SCRIPT, tool="menu")
+            return WAIT
+
         if screen == "character_select":
             if not self._character_picked and "IRONCLAD" in options:
                 self._character_picked = True
                 return Decision(action=MenuSelect("IRONCLAD"), reason="选择角色", source=Source.SCRIPT, tool="menu")
-            if "embark" in options:
+            # 'embark' uses the previous selection; 'confirm' commits the one we
+            # just clicked (the bridge says "Use 'confirm' to embark").
+            if "confirm" in options:
                 self._character_picked = False
-                return Decision(action=MenuSelect("embark"), reason="开始新局", source=Source.SCRIPT, tool="menu")
+                return Decision(action=MenuSelect("confirm"), reason="确认角色并出发",
+                                source=Source.SCRIPT, tool="menu")
             return WAIT
 
         if screen == "tutorial_prompt":
@@ -165,7 +190,9 @@ class GameAgent:
                         # The game can close a screen between our read and our
                         # send. That is a lost race, not a bad decision: re-read
                         # on the next tick instead of aborting the run.
-                        if any(token in str(exc) for token in ("not open", "not available", "No card")):
+                        retryable = ("not open", "not available", "No card", "Not in combat",
+                                     "no combat", "not in progress")
+                        if any(token in str(exc) for token in retryable):
                             time.sleep(0.4)
                             continue
                         raise
@@ -184,7 +211,10 @@ class GameAgent:
                     # gap, not a wait -- stop so a human can look once.
                     return f"no_decision:{decision.reason}"
                 idle += 1
-                if idle > 40:
+                # Combat waits (enemy turn, phase transitions, wave spawns) can
+                # legitimately last tens of seconds; other screens should not.
+                combat_like = last_screen in ("monster", "elite", "boss", "hand_select", "card_select")
+                if idle > (150 if combat_like else 40):
                     return f"stuck:{last_screen}"
             else:
                 idle = 0

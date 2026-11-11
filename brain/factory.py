@@ -27,7 +27,8 @@ DEFAULT_BASE = "http://127.0.0.1:15526"
 
 
 def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
-                journal_dir: Optional[Path] = None) -> GameAgent:
+                journal_dir: Optional[Path] = None,
+                stop_after_run: bool = False) -> GameAgent:
     client = None if offline else LLMClient.from_env()
     journal = Journal.create(journal_dir) if journal_dir else None
     return GameAgent(
@@ -37,4 +38,5 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
         combat_agent=CombatAgent(CombatSearchTool()),
         select_agent=SelectAgent(SelectTool()),
         journal=journal,
+        stop_after_run=stop_after_run,
     )

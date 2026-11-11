@@ -54,8 +54,9 @@ data/combat/         从日志里抽出的战斗决策数据集，**入库**，�
 .\sts2.cmd fight --encounter lagavulin --runs 30   # 离线打整场，不连游戏
 .\sts2.cmd fight-live                              # 接管游戏里当前这场战斗
 .\sts2.cmd run --offline                           # 整局自动（不调 LLM）
+.\sts2.cmd run --offline --one-run                 # 跑完一局就退出，便于逐局分析
 .\sts2.cmd dry --from captures/combat-001.json      # 单状态决策
-python -m unittest discover -s brain/tests -t .     # 50 个离线测试
+python -m unittest discover -s brain/tests -t .     # 62 个离线测试
 ```
 
 构建 mod：`powershell -ExecutionPolicy Bypass -File .\build.ps1 [-Install]`
