@@ -99,6 +99,16 @@ python -m unittest discover -s brain/tests -t .     # 50 个离线测试
 python tools\extract_combat.py logs data\combat
 ```
 
+每条记录的形状（顶层摘要是给人看和过滤用的，完整状态在 `state` 里）：
+
+```json
+{"step": 90, "fight": "1-13", "act": 1, "floor": 13, "turn": 3,
+ "enemies": [{"name": "飞蝇菌子", "hp": 49}],
+ "hand": ["连续反弹", "突然一拳", "防御"],
+ "energy": 3, "hp": 34, "max_hp": 70,
+ "state": {...}, "decision": {"action": {...}, "reason": "..."}}
+```
+
 用途：
 
 - 离线重放：`brain.cli combat --journal data/combat/xxx.jsonl`

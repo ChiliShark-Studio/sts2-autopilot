@@ -8,10 +8,13 @@ the states where a combat decision was made, plus the decision itself.
 
 Output is one JSONL per source run:
 
-    {"step": 42, "screen": "monster", "state": {...}, "decision": {...}}
+    {"step": 42, "fight": "1-13", "act": 1, "floor": 13, "turn": 2,
+     "enemies": [{"name": "飞蝇菌子", "hp": 49}], "hand": ["打击", "防御"],
+     "energy": 3, "hp": 34, "max_hp": 70, "state": {...}, "decision": {...}}
 
-Only entries with a real decision are kept -- waits carry no signal and are the
-bulk of a journal.
+The top-level summary duplicates what is inside ``state`` on purpose: it makes
+the file readable (and greppable) without parsing a 7 KB blob, and ``fight``
+groups the decisions that belong to the same encounter.
 """
 
 from __future__ import annotations
@@ -22,6 +25,29 @@ from pathlib import Path
 from typing import Any, Iterable
 
 COMBAT_SCREENS = {"monster", "hand_select", "card_select"}
+
+
+def summarize(state: dict[str, Any]) -> dict[str, Any]:
+    """Pull the context a human (or a filter) wants without opening ``state``."""
+    battle = state.get("battle") or {}
+    player = state.get("player") or {}
+    run = state.get("run") or {}
+    act = run.get("act")
+    floor = run.get("floor")
+    return {
+        "fight": f"{act}-{floor}",
+        "act": act,
+        "floor": floor,
+        "turn": battle.get("round"),
+        "enemies": [
+            {"name": e.get("name"), "hp": e.get("hp")}
+            for e in (battle.get("enemies") or []) if isinstance(e, dict)
+        ],
+        "hand": [c.get("name") for c in (player.get("hand") or []) if isinstance(c, dict)],
+        "energy": player.get("energy"),
+        "hp": player.get("hp"),
+        "max_hp": player.get("max_hp"),
+    }
 
 
 def iter_journal(path: Path) -> Iterable[dict[str, Any]]:
@@ -49,12 +75,11 @@ def extract(path: Path) -> list[dict[str, Any]]:
         state = entry.get("state")
         if not isinstance(state, dict):
             continue
-        kept.append({
-            "step": entry.get("step"),
-            "screen": screen,
-            "state": state,
-            "decision": decision,
-        })
+        record = {"step": entry.get("step"), "screen": screen}
+        record.update(summarize(state))
+        record["state"] = state
+        record["decision"] = decision
+        kept.append(record)
     return kept
 
 
