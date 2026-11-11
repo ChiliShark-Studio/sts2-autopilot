@@ -88,7 +88,7 @@ python -m brain.cli run --steps 400     # 自动游玩
 python -m brain.cli dry                 # 只决策一次，不发动作
 python -m brain.cli dry --from captures/combat-001.json   # 离线跑历史状态
 python -m brain.cli combat --from captures/combat-001.json  # 战斗算法独立跑
-python -m brain.cli combat --journal logs/run-*.jsonl       # 在历史状态上批量跑
+python -m brain.cli combat --journal data/combat/run-*.jsonl  # 在战斗数据集上批量跑
 python -m brain.cli replay logs/run-*.jsonl               # 汇总一局的决策分布
 python -m unittest discover -s brain/tests -t .           # 42 个离线测试
 ```

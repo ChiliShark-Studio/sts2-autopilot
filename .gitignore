@@ -6,12 +6,14 @@ out/
 **/bin/
 **/obj/
 
-# python (decision layer, planned)
+# python
 __pycache__/
 *.py[cod]
 .venv/
+
+# 原始日志：每步完整状态，一次对局 1-3MB，不入库。
+# 需要调优的战斗数据由 tools/extract_combat.py 抽到 data/combat/ 再提交。
 logs/
-*.jsonl
 
 # secrets -- never committed
 brain/.env
