@@ -43,10 +43,56 @@ def execute_infection(fight: Fight, monster: Monster, params: dict[str, Any]) ->
             pile.append(card)
 
 
+def _validate_gain_plow(params: Any) -> None:
+    """跺地: 获得固定层数的横冲直撞, 同时决定击晕阈值."""
+    if not isinstance(params, dict) or params.keys() != {"amount"}:
+        raise ValueError("gain_plow.params 必须且只能包含 amount")
+    if type(params["amount"]) is not int or params["amount"] < 1:
+        raise ValueError("gain_plow.amount 必须是大于等于 1 的整数")
+
+
+def _preview_gain_plow(fight: Fight, monster: Monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "Buff", "label": "", "title": "强化",
+             "description": f"获得 {params['amount']} 层横冲直撞。"}]
+
+
+def _execute_gain_plow(fight: Fight, monster: Monster, params: dict[str, Any]) -> None:
+    amount = int(params["amount"])
+    monster.powers["PLOW_POWER"] = amount
+    # 仪式兽: 血量第一次降到该层数(含)以下且受到伤害时被击晕.
+    monster.stun_below_hp = amount
+
+
+def _validate_apply_ringing(params: Any) -> None:
+    if not isinstance(params, dict) or params.keys() != {"count"}:
+        raise ValueError("apply_ringing.params 必须且只能包含 count")
+    if type(params["count"]) is not int or params["count"] < 1:
+        raise ValueError("apply_ringing.count 必须是大于等于 1 的整数")
+
+
+def _preview_apply_ringing(fight: Fight, monster: Monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "Debuff", "label": "", "title": "策略",
+             "description": f"给玩家施加 {params['count']} 层昏眩 (本回合只能打出1张牌)。"}]
+
+
+def _execute_apply_ringing(fight: Fight, monster: Monster, params: dict[str, Any]) -> None:
+    fight.ringing_pending = int(params["count"])
+
+
 CUSTOM_INTENTS = {
     "add_infection": {
         "validate": validate_infection,
         "preview": preview_infection,
         "execute": execute_infection,
+    },
+    "gain_plow": {
+        "validate": _validate_gain_plow,
+        "preview": _preview_gain_plow,
+        "execute": _execute_gain_plow,
+    },
+    "apply_ringing": {
+        "validate": _validate_apply_ringing,
+        "preview": _preview_apply_ringing,
+        "execute": _execute_apply_ringing,
     },
 }

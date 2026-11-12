@@ -45,11 +45,36 @@ def _lagavulin() -> list[Monster]:
                     script=[Intent("attack", 18), Intent("attack", 18), Intent("attack", 18)])]
 
 
+def _ceremonial_beast() -> list[Monster]:
+    """密林 Boss 仪式兽: 252 血, 两阶段.
+
+    一阶段: 第 1 回合跺地获得 150 层横冲直撞, 之后每回合横冲直撞(18 伤 +2 力量).
+    过渡: 血量第一次降到 150 或以下且受到伤害 -> 击晕一回合, 力量清零.
+    二阶段: 野兽咆哮(给玩家昏眩) -> 踩踏(15) -> 碾碎(17 伤 +3 力量) 循环.
+
+    数值来源: 游戏内卡牌/状态文本与灰机 wiki、Spire Codex; 非官方导出数据,
+    仅用于同种子下的策略对比, 不能当作真实胜率.
+    """
+    stamp = Intent("custom", handler="gain_plow", params={"amount": 150})
+    plow = Intent("attack", damage=18, strength=2)
+    cry = Intent("custom", handler="apply_ringing", params={"count": 1})
+    stomp = Intent("attack", damage=15)
+    crush = Intent("attack", damage=17, strength=3)
+    return [Monster(
+        "仪式兽", hp=252, max_hp=252,
+        # 跺地只在第 1 回合, 之后重复横冲直撞.
+        script=[stamp, plow], repeat=True, repeat_from=1,
+        entity_id="CEREMONIAL_BEAST_0",
+        next_phase_script=[cry, stomp, crush],
+    )]
+
+
 ENCOUNTERS = {
     "nibbit": _nibbit,
     "slimes": _slimes,
     "jaw_worm": _jaw_worm,
     "lagavulin": _lagavulin,
+    "ceremonial_beast": _ceremonial_beast,
 }
 
 

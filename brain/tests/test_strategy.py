@@ -248,6 +248,16 @@ class StrategyContextTests(unittest.TestCase):
         self.assertIn("篝火默认锻造", prompt)
         self.assertIn("不要超过本幕篝火总数的一半", prompt)
 
+    def test_ironclad_prompt_limits_filler_cards(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("过渡牌只在前五层左右值得抓", prompt)
+        self.assertIn("优先攒钱", prompt)
+
+    def test_ironclad_prompt_sets_deck_size_and_removal_priority(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("牌组控制在 12 到 15 张", prompt)
+        self.assertIn("删牌优先于买新牌", prompt)
+
     def test_battle_and_combat_pickers_never_call_llm(self):
         client = client_with()
         with patch("brain.factory.LLMClient.from_env", return_value=client):

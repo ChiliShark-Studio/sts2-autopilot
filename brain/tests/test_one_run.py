@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import unittest
 
+from brain.agents.build import BuildAgent
 from brain.agents.game import GameAgent, StopRun
 from brain.contracts import Decision
 from brain.model import GameState
+from brain.tools.build_flow import BuildFlowTool
 
 
 class _StubAgent:
@@ -60,6 +62,39 @@ class OneRunTests(unittest.TestCase):
         a = agent(stop_after_run=True)
         decision = a.decide(menu())  # 首次读取时仍在菜单
         self.assertIsNotNone(decision.action)
+
+
+class RetryableErrorTests(unittest.TestCase):
+    """奖励界面还在播放时, 继续按钮会短暂不可用; 这不应中断整局."""
+
+    def test_missing_proceed_button_is_retried(self):
+        from brain.transport import BridgeError
+        from brain.tools.build_flow import BuildFlowTool
+
+        class Port:
+            def __init__(self):
+                self.calls = 0
+
+            def state(self):
+                return GameState.parse({
+                    "state_type": "rewards",
+                    "rewards": {"items": [], "can_proceed": True},
+                    "player": {"hp": 50, "max_hp": 80},
+                })
+
+            def act(self, action, state=None):  # noqa: ANN001
+                self.calls += 1
+                if self.calls == 1:
+                    raise BridgeError("继续 rejected: No proceed button available or enabled")
+                return {"status": "ok"}
+
+        port = Port()
+        stub = _StubAgent()
+        agent = GameAgent(port, map_agent=stub, build_agent=BuildAgent(BuildFlowTool()),
+                          combat_agent=stub)
+        outcome = agent.run(max_steps=1, settle=0)
+        self.assertEqual(outcome, "max_steps")
+        self.assertEqual(port.calls, 2)
 
 
 if __name__ == "__main__":

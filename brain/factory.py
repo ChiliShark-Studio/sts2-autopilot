@@ -14,6 +14,7 @@ from .agents.combat import CombatAgent
 from .agents.game import GameAgent
 from .agents.map import MapAgent
 from .agents.select import SelectAgent
+from .enemy_rules import RuleBook
 from .llm import LLMClient
 from .replay import Journal
 from .tools.build_flow import BuildFlowTool
@@ -37,7 +38,8 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
         Bridge(base),
         map_agent=MapAgent(MapRouterTool(client, context)),
         build_agent=BuildAgent(BuildFlowTool(client, context)),
-        combat_agent=CombatAgent(CombatSearchTool(advisor=PotionAdvisor(client, context))),
+        combat_agent=CombatAgent(CombatSearchTool(advisor=PotionAdvisor(client, context),
+                                                  rules=RuleBook.with_defaults())),
         select_agent=SelectAgent(SelectTool(client, context)),
         strategy_context=context,
         journal=journal,

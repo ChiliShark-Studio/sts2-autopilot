@@ -132,6 +132,10 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     能力牌的全部价值都在这里, 不解析就等于在模拟中空过.
     """
     desc = card.get("description") or ""
+    # "在回合开始时，获得 1 点能量" 是每回合生效, 不是打出时立即获得;
+    # 能量在描述里可能写成图标 (energy_icon), 因此两种写法都要认.
+    per_turn = "回合开始时" in desc and ("能量" in desc or "energy_icon" in desc)
+    energy_now = 0 if per_turn else (_field(card, "energy", _ENERGY) or desc.count("energy_icon"))
 
     damage = _field(card, "damage", _DAMAGE)
     block = _field(card, "block", _BLOCK)
@@ -161,7 +165,10 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "weak": _field(card, "weak", _WEAK),
         "draw": _field(card, "draw", _DRAW),
         # 能量可能是结构化字段, 也可能被渲染成图标; 每个能量图标算 1 点.
-        "energy": _field(card, "energy", _ENERGY) or desc.count("energy_icon"),
+        "energy": energy_now,
+        # 每回合开始获得的能量 (薪火之源): 价值在后续回合, 由搜索折算.
+        "per_turn_energy": (desc.count("energy_icon") or _int(card.get("energy"), 0) or 1)
+        if per_turn else 0,
         # 以生命为费用的牌 (放血): 掉血必须计入, 否则 0 费产能会被高估.
         "hp_cost": _first(_HP_COST, desc),
         # 覆甲: 回合结束时按层数获得格挡.

@@ -48,14 +48,68 @@ class IncomingDamageTests(unittest.TestCase):
         self.assertEqual(resolved_attack(intent), (7, 2))
 
 
+class RingingTests(unittest.TestCase):
+    """仪式兽的昏眩: 本回合只能打出 1 张牌."""
+
+    FIXTURE = Path(__file__).with_name("data") / "ringed_turn.json"
+
+    def _state(self) -> dict:
+        return json.loads(self.FIXTURE.read_text(encoding="utf-8"))["201"]
+
+    def test_ringing_limits_plays_to_one_card(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        parsed = GameState.parse(self._state())
+        sim = _Sim.build(parsed.player, parsed.battle)
+        self.assertEqual(sim.play_limit, 1)
+        pos, target = sim.legal()[0]
+        self.assertTrue(sim.play(pos, target))
+        # 出过一张牌后, 本回合不应再有任何合法出牌.
+        self.assertEqual(sim.legal(), [])
+
+    def test_ringed_turn_blocks_instead_of_dying(self):
+        # 12 血面对 15 点攻击: 只有一张牌的机会, 应该用来格挡而不是打输出.
+        decision = decide_state(self._state())
+        self.assertEqual(decision.action.kind, "play_card")
+        self.assertIn("格挡", decision.reason)
+        self.assertIn("耸肩无视", decision.reason)
+
+
 class PotionUseTests(unittest.TestCase):
     """濒死回合要用药水保命, 而不是继续输出."""
 
-    def test_uses_block_potion_when_incoming_would_kill(self):
-        # 14 血、承受 15 点攻击: 不喝药必死, 格挡药水 12 点可以活下来.
-        decision = decide_state(state("610"))
+    def test_real_frame_prefers_survival(self):
+        # 补上死亡惩罚后, 这一帧不会再为了打满输出而选择被打死.
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim, _plan
+
+        parsed = GameState.parse(state("610"))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        plan = _plan(sim, 10, 7)
+        self.assertGreater(plan.hp_left, 0)
+
+    def test_uses_block_potion_when_no_card_survives(self):
+        # 手牌只有 5 点格挡, 10 血吃 15 点伤害; 12 点格挡药水才能救回来.
+        raw = {
+            "state_type": "elite",
+            "battle": {
+                "round": 3, "turn": "player", "ready_for_action": True,
+                "enemies": [{"entity_id": "E_0", "name": "仪式兽", "hp": 60, "max_hp": 252,
+                             "intents": [{"type": "Attack", "damage": 15, "hits": 1,
+                                          "label": "15",
+                                          "description": "这个敌人将要攻击造成15点伤害。"}]}],
+            },
+            "player": {
+                "hp": 10, "max_hp": 80, "energy": 1, "block": 0,
+                "hand": [{"index": 0, "name": "防御", "cost": "1", "block": 5}],
+                "potions": [{"slot": 0, "id": "BLOCK_POTION", "name": "格挡药水",
+                             "description": "获得12点格挡。", "target_type": "Self",
+                             "can_use_in_combat": True}],
+            },
+        }
+        decision = decide_state(raw)
         self.assertEqual(decision.action.kind, "use_potion")
-        self.assertIn("格挡药水", decision.reason)
         self.assertIn("保命", decision.reason)
 
     def test_uses_potion_at_end_of_turn_instead_of_waiting(self):

@@ -200,8 +200,11 @@ class GameAgent:
                         # 读取状态到发送动作之间, 游戏可能已经关闭当前界面.
                         # 这是状态变化引起的时序竞争, 下一轮应重新读取,
                         # 无需因此中断整局游戏.
+                        # 领取卡牌奖励后, 奖励界面可能还在播放, 此时继续按钮尚未可用;
+                        # 这类"按钮还没出来"的错误同样只需重新读取状态.
                         retryable = ("not open", "not available", "No card", "Not in combat",
-                                     "no combat", "not in progress")
+                                     "no combat", "not in progress", "No proceed button",
+                                     "proceed button", "not enabled")
                         if any(token in str(exc) for token in retryable):
                             time.sleep(0.4)
                             continue

@@ -72,6 +72,15 @@ _DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
 # 会改变数值结算的玩家负面状态.
 _SHRINK = {"缩小", "shrink", "SHRINK_POWER"}
 _NO_BLOCK = {"不可格挡", "no block", "NO_BLOCK_POWER"}
+# 昏眩 (仪式兽): 本回合只能打出 1 张牌.
+_RINGING = {"昏眩", "ringing", "RINGING_POWER"}
+# 方案终点会死亡时的惩罚分, 让搜索优先选择活下来的打法.
+LETHAL_PENALTY = 1000.0
+# 每回合额外获得 1 点能量大约值多少分 (约等于一张基础攻击牌的伤害).
+ENERGY_VALUE = 6.0
+# 估计战斗还剩几回合: 按敌方总血量每 20 点一回合, 限制在 1~5 回合.
+HP_PER_TURN = 20
+MAX_FUTURE_TURNS = 5
 
 
 def _power(powers: dict[str, int], aliases: set[str]) -> int:
@@ -107,6 +116,8 @@ class _Enemy:
     incoming: int = 0
     vulnerable: int = 0
     weak: int = 0
+    # 状态能力层数 (按 id), 供敌人机制规则读取, 例如仪式兽的 PLOW_POWER.
+    powers: dict[str, int] = field(default_factory=dict)
     # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
     slippery: int = 0
     # 无实体: 每次命中的伤害上限为 1.
@@ -131,6 +142,11 @@ class _Sim:
     plated: int = 0
     # 阵亡自动复活 (瓶中精灵) 时回复的最大生命值百分比; 0 表示没有这类药水.
     revive_pct: int = 0
+    # 本回合最多能打出几张牌 (昏眩把上限压到 1).
+    play_limit: int = 99
+    cards_played: int = 0
+    # 打出后会在后续回合持续产生的价值 (例如薪火之源每回合 +1 能量).
+    future_value: float = 0.0
     frail: int = 0
     # 复制药水: 下一张牌打出两次.
     duplicate_next: int = 0
@@ -158,6 +174,8 @@ class _Sim:
             weak=_power(player.powers, _WEAK) > 0,
             shrink=_power(player.powers, _SHRINK) > 0,
             no_block=_power(player.powers, _NO_BLOCK) > 0,
+            # 昏眩: 本回合只能打出 1 张牌, 搜索必须按这个上限规划.
+            play_limit=1 if _power(player.powers, _RINGING) > 0 else 99,
             enemies=[
                 _Enemy(
                     entity_id=e.entity_id,
@@ -169,6 +187,7 @@ class _Sim:
                     weak=_power(e.powers, _WEAK),
                     slippery=_power(e.powers, _SLIPPERY),
                     intangible=_power(e.powers, _INTANGIBLE) > 0,
+                    powers=dict(e.powers),
                 )
                 for e in battle.alive_enemies
             ],
@@ -178,6 +197,9 @@ class _Sim:
         return copy.deepcopy(self)
 
     def legal(self) -> list[tuple[int, Optional[int]]]:
+        # 昏眩等状态会限制本回合出牌数, 达到上限后只剩结束回合.
+        if self.cards_played >= self.play_limit:
+            return []
         out: list[tuple[int, Optional[int]]] = []
         for pos, card in enumerate(self.hand):
             if not card.can_play or card.cost > self.energy:
@@ -194,6 +216,7 @@ class _Sim:
         card = self.hand[pos]
         if card.cost > self.energy:
             return False
+        self.cards_played += 1
         self.energy -= card.cost
         self.hand.pop(pos)
 
@@ -234,6 +257,9 @@ class _Sim:
         # 没有这一步, 燃烧之类的牌在模拟里等于空过一张能量.
         self.strength += card.strength * multiplier
         self.dexterity += card.dexterity * multiplier
+        if card.per_turn_energy:
+            # 单回合搜索看不到后续收益, 按预计剩余回合折算.
+            self.future_value += card.per_turn_energy * ENERGY_VALUE * self.future_turns()
         # 覆甲: 回合结束时按层数获得格挡, 单回合模型按当回合可用格挡计.
         self.plated += card.plated * multiplier
         # 以生命为费用: 放血之外的掉血牌也要付这个代价.
@@ -245,6 +271,11 @@ class _Sim:
             enemy.weak += card.weak
         self.energy += card.energy
         return True
+
+    def future_turns(self) -> int:
+        """按敌方剩余总血量粗略估计还能打几回合, 用于折算每回合收益."""
+        total = sum(e.hp for e in self.enemies if e.alive)
+        return max(1, min(MAX_FUTURE_TURNS, total // HP_PER_TURN))
 
     def total_incoming(self) -> int:
         return sum(e.incoming for e in self.enemies if e.alive)
@@ -361,16 +392,32 @@ class _Plan:
             # 瓶中精灵会挡住这次死亡并把生命拉回一定比例,
             # 因此"这回合会不会死"不能只看血量归零.
             hp_left = max(1, sim.max_hp * sim.revive_pct // 100)
+        score = sim.value() + sim.future_value
+        if hp_left <= 0:
+            # 打输出打得再漂亮, 这回合死了也没有意义:
+            # 没有这一项时, 搜索会为了多打 20 点伤害而选择不格挡.
+            score -= LETHAL_PENALTY
         return cls(
             sequence=sequence,
-            score=sim.value(),
+            score=score,
             damage_taken=damage_taken,
             hp_left=hp_left,
             won=sim.hp > 0 and not any(e.alive for e in sim.enemies),
         )
 
 
-def _plan(sim: _Sim, beam: int = 10, depth: int = 7) -> _Plan:
+def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
+    """束搜索本回合的最佳出牌顺序.
+
+    排序与择优都使用 ``_Plan`` 的方案评分 (包含死亡惩罚),
+    不能拿 ``sim.value()`` 混着比: 那会把"多打 20 点伤害但本回合被打死"
+    排到"少打一点但活下来"前面.
+    ``rules`` 提供敌人机制修正 (例如打到阈值会让对方少行动一回合).
+    """
+
+    def rank(plan: _Plan) -> tuple[int, float]:
+        return (1 if plan.won else 0, plan.score)
+
     best = _Plan.from_sim(sim, [])
     frontier = [(sim, [])]
     for _ in range(depth):
@@ -380,24 +427,32 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7) -> _Plan:
                 child = node.clone()
                 if not child.play(pos, target):
                     continue
-                expanded.append((child.value(), child, seq + [(pos, target)]))
+                sequence = seq + [(pos, target)]
+                plan = _Plan.from_sim(child, sequence)
+                if rules is not None:
+                    plan.score += rules.crossing_bonus(node, child)
+                if rank(plan) > rank(best):
+                    best = plan
+                expanded.append((plan, child, sequence))
         if not expanded:
             break
-        expanded.sort(key=lambda item: item[0], reverse=True)
-        frontier = [(node, seq) for _, node, seq in expanded[:beam]]
-        if expanded[0][0] > best.score:
-            best = _Plan.from_sim(expanded[0][1], expanded[0][2])
+        expanded.sort(key=lambda item: rank(item[0]), reverse=True)
+        frontier = [(child, seq) for _, child, seq in expanded[:beam]]
+        if not any(child.legal() for child, _ in frontier):
+            break
     return best
 
 
 class CombatSearchTool:
     name = "combat_search"
 
-    def __init__(self, beam: int = 10, depth: int = 7, advisor=None) -> None:
+    def __init__(self, beam: int = 10, depth: int = 7, advisor=None, rules=None) -> None:
         self.beam = beam
         self.depth = depth
         # 效果无法模拟的药水 (抽牌 / 随机牌等) 只能由模型判断是否使用.
         self.advisor = advisor
+        # 敌人机制规则 (策略模式); 默认不假设任何机制.
+        self.rules = rules
         self._advised: dict[tuple, Optional[Decision]] = {}
         # 药水顾问选择不使用时的说明, 会附加到本次决策的日志里.
         self._potion_note = ""
@@ -418,7 +473,7 @@ class CombatSearchTool:
 
         # 同一次决策复用基础状态和搜索结果, 下一次决策仍从新状态重新计算.
         sim = _Sim.build(state.player, battle)
-        plan = _plan(sim, self.beam, self.depth)
+        plan = _plan(sim, self.beam, self.depth, self.rules)
 
         # 药水不消耗能量, 在出牌消耗能量前检查.
         potion = self._potion(state, sim, plan)
@@ -516,7 +571,7 @@ class CombatSearchTool:
             for target_index in targets:
                 trial = sim.clone()
                 trial.apply_potion(eff, target_index)
-                plan = _plan(trial, self.beam, self.depth)
+                plan = _plan(trial, self.beam, self.depth, self.rules)
                 delta = plan.score - base.score
                 # 防御性增益的价值在格挡上, 用本回合少掉的血衡量.
                 blocked = base.damage_taken - plan.damage_taken
@@ -553,14 +608,15 @@ class CombatSearchTool:
         )
 
 
-def decide_state(raw: dict[str, Any]) -> Decision:
+def decide_state(raw: dict[str, Any], rules=None) -> Decision:
     """独立入口: 输入原始状态字典, 输出决策.
 
     不依赖桥接, 文件或时钟. 离线基准调用此函数,
     后续 C# 移植应与其逐项对齐.
+    ``rules`` 用于传入敌人机制规则; 省略时不做任何机制假设.
     """
     from ..model import GameState
 
-    return CombatSearchTool().decide(
+    return CombatSearchTool(rules=rules).decide(
         DecisionRequest(kind=DecisionKind.COMBAT, state=GameState.parse(raw))
     )

@@ -51,18 +51,45 @@ class Monster:
     entity_id: str = ""
     repeat: bool = True
     repeat_from: int = 0
+    # 额外能力层数, 按 id 保存 (例如仪式兽的 PLOW_POWER).
+    powers: dict[str, int] = field(default_factory=dict)
+    # 受伤后血量降到该值(含)以下时击晕并切换阶段; None 表示没有这个机制.
+    stun_below_hp: Optional[int] = None
+    # 击晕后使用的新行动脚本; None 表示保持原脚本.
+    next_phase_script: Optional[list[Intent]] = None
+    # 被击晕的下一回合不行动.
+    skip_next: bool = False
 
     @property
     def alive(self) -> bool:
         return self.hp > 0
 
     def intent(self) -> Intent:
+        if self.skip_next:
+            return Intent("wait")
         if self.step < len(self.script):
             return self.script[self.step]
         if not self.repeat:
             raise IntentExhausted(f"{self.name} 的后续意图未定义")
         index = self.repeat_from + (self.step - len(self.script)) % (len(self.script) - self.repeat_from)
         return self.script[index]
+
+    def on_damaged(self, damage: int) -> bool:
+        """处理受伤后的机制, 返回是否触发了击晕."""
+        if damage <= 0 or self.stun_below_hp is None or not self.alive:
+            return False
+        if self.hp > self.stun_below_hp:
+            return False
+        # 击晕: 清除击晕条件, 力量归零, 下一回合不行动, 之后改用新脚本.
+        self.stun_below_hp = None
+        self.strength = 0
+        self.powers.pop("PLOW_POWER", None)
+        self.skip_next = True
+        if self.next_phase_script is not None:
+            self.script = self.next_phase_script
+            self.step = 0
+            self.repeat_from = 0
+        return True
 
     def attack_damage(self) -> int:
         """意图展示与实际结算共用含力量和虚弱修正的单次伤害."""
@@ -146,6 +173,10 @@ class Fight:
         self.discard: list[DeckCard] = []
         self.cards_played = 0
         self.damage_taken = 0
+        # 昏眩: 敌人施加后, 玩家下个回合只能打出 1 张牌.
+        self.ringing_pending = 0
+        self.ringing_active = False
+        self.turn_cards_played = 0
 
     # -- 牌堆处理 --
     def _draw(self, count: int) -> None:
@@ -164,6 +195,10 @@ class Fight:
             self.block = 0
             self.energy = self.max_energy
         self._started = True
+        # 昏眩只持续一个回合: 上一轮被施加的话, 本回合生效.
+        self.ringing_active = self.ringing_pending > 0
+        self.ringing_pending = 0
+        self.turn_cards_played = 0
         self._draw(self.draw_per_turn)
 
     # -- 动作处理 --
@@ -173,9 +208,13 @@ class Fight:
         card = self.hand[hand_index]
         if not card.playable or card.cost > self.energy:
             return False
+        # 昏眩: 本回合已经出过一张牌, 不能再出.
+        if self.ringing_active and self.turn_cards_played >= 1:
+            return False
         self.energy -= card.cost
         self.hand.pop(hand_index)
         self.cards_played += 1
+        self.turn_cards_played += 1
 
         monster = None
         if target:
@@ -188,13 +227,18 @@ class Fight:
             monster = alive[0] if alive else None
 
         if card.damage > 0 and monster is not None:
+            dealt = 0
             for _ in range(max(1, card.hits)):
                 dmg = max(0, card.damage + self.strength)
                 if monster.vulnerable:
                     dmg = int(dmg * 1.5)
                 absorbed = min(monster.block, dmg)
                 monster.block -= absorbed
-                monster.hp -= max(0, dmg - absorbed)
+                hit = max(0, dmg - absorbed)
+                monster.hp -= hit
+                dealt += hit
+            # 受伤后可能触发敌人的击晕/阶段切换 (例如仪式兽).
+            monster.on_damaged(dealt)
 
         if card.block > 0:
             self.block += max(0, card.block + self.dexterity)
@@ -227,6 +271,10 @@ class Fight:
 
         for monster in self.monsters:
             if not monster.alive:
+                continue
+            if monster.skip_next:
+                # 被击晕: 这一回合不行动, 也不推进行动脚本.
+                monster.skip_next = False
                 continue
             intent = monster.intent()
             damage = monster.attack_damage()
@@ -290,7 +338,8 @@ class Fight:
                 "draw": card.draw,
                 "energy": card.energy,
                 "target_type": card.target,
-                "can_play": card.playable and card.cost <= self.energy,
+                "can_play": (card.playable and card.cost <= self.energy
+                             and not (self.ringing_active and self.turn_cards_played >= 1)),
                 "unplayable_reason": "HasUnplayableKeyword" if not card.playable else None,
                 "description": card.description,
             })
@@ -300,7 +349,10 @@ class Fight:
             if not monster.alive:
                 continue
             intent = monster.intent()
-            if intent.type == "custom":
+            if intent.type == "wait":
+                intents = [{"type": "Stun", "label": "", "title": "击晕",
+                            "description": "这个敌人在其下一回合无法行动。"}]
+            elif intent.type == "custom":
                 from .special_intents import CUSTOM_INTENTS
 
                 intents = CUSTOM_INTENTS[intent.handler]["preview"](self, monster, intent.params)
@@ -339,7 +391,10 @@ class Fight:
                 "status": ([{"id": "STRENGTH_POWER", "name": "力量", "amount": self.strength}]
                            if self.strength else []) + (
                            [{"id": "DEXTERITY_POWER", "name": "敏捷", "amount": self.dexterity}]
-                           if self.dexterity else []),
+                           if self.dexterity else []) + (
+                           [{"id": "RINGING_POWER", "name": "昏眩", "amount": 1,
+                             "description": "本回合你只能打出1张牌。"}]
+                           if self.ringing_active else []),
                 "hand": hand,
             },
         }
@@ -348,11 +403,14 @@ class Fight:
     def _powers(monster: Monster) -> list[dict[str, Any]]:
         out = []
         if monster.vulnerable:
-            out.append({"name": "易伤", "amount": monster.vulnerable})
+            out.append({"id": "VULNERABLE_POWER", "name": "易伤", "amount": monster.vulnerable})
         if monster.weak:
-            out.append({"name": "虚弱", "amount": monster.weak})
+            out.append({"id": "WEAK_POWER", "name": "虚弱", "amount": monster.weak})
         if monster.strength:
-            out.append({"name": "力量", "amount": monster.strength})
+            out.append({"id": "STRENGTH_POWER", "name": "力量", "amount": monster.strength})
+        # 额外能力: 保留 id 和数值, 供敌人机制规则读取 (如仪式兽的横冲直撞层数).
+        for power_id, amount in monster.powers.items():
+            out.append({"id": power_id, "name": power_id, "amount": amount})
         return out
 
 

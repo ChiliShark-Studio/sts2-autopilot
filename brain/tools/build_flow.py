@@ -344,7 +344,12 @@ class BuildFlowTool:
                     candidates.append((-2 - potion.slot, DiscardPotion(potion.slot),
                                        {"说明": "先腾出槽位；下一步重新读取商品和金币后再决定购买",
                                         "discard": asdict(potion), "incoming_potions": potions}))
-        decision = self._choose(request, "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。", candidates)
+        decision = self._choose(
+            request,
+            "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。"
+            "牌组还有基础打击或防御时，删牌优先于买新牌；"
+            "不要为了花掉金币而买填充牌；买不起删牌或关键牌时优先攒钱。",
+            candidates)
         if decision is not None:
             if isinstance(decision.action, ShopPurchase):
                 self._shop_bought = True

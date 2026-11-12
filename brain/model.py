@@ -91,6 +91,8 @@ class Card:
     plated: int = 0
     # 以生命为费用 (放血: 失去 3 点生命).
     hp_cost: int = 0
+    # 每回合开始获得的能量 (薪火之源); 价值在后续回合.
+    per_turn_energy: int = 0
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -125,6 +127,7 @@ class Card:
             dexterity=parsed.get("dexterity", 0),
             plated=parsed.get("plated", 0),
             hp_cost=parsed.get("hp_cost", 0),
+            per_turn_energy=parsed.get("per_turn_energy", 0),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),
