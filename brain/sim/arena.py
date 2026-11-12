@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from ..tools.combat_search import decide_state
-from .engine import DeckCard, Fight, FightResult, Monster
+from .engine import DeckCard, Fight, FightResult, IntentExhausted, Monster
+from .scenario_file import Scenario
 
 Policy = Callable[[dict[str, Any]], Any]
 
@@ -20,31 +21,46 @@ def run_fight(deck: list[DeckCard], monsters: list[Monster], *, seed: int = 0,
               hp: int = 70, max_hp: int = 70, max_energy: int = 3,
               max_turns: int = 60, policy: Policy = decide_state) -> FightResult:
     fight = Fight(deck, monsters, hp=hp, max_hp=max_hp, max_energy=max_energy, seed=seed)
-    fight.start_turn()
+    return _play_fight(fight, max_turns=max_turns, policy=policy)
 
-    stuck = 0
+
+def _play_fight(fight: Fight, *, max_turns: int, policy: Policy) -> FightResult:
+    """内置遭遇与文件场景共用同一战斗循环, 不支持的动作报告为未完成."""
+    fight.start_turn()
+    outcome = "incomplete:turn_limit"
+    decisions = 0
     while not fight.over and fight.turn <= max_turns:
-        decision = policy(fight.to_state())
+        # 零费抽牌等循环可能不结束回合, 需要独立的决策次数上限.
+        if decisions >= max_turns * 100:
+            outcome = "incomplete:action_limit"
+            break
+        decisions += 1
+        try:
+            decision = policy(fight.to_state())
+        except IntentExhausted:
+            outcome = "incomplete:intents_exhausted"
+            break
         action = decision.action
 
         if action is not None and action.kind == "play_card":
             if fight.play(action.card.index, action.target):
-                stuck = 0
                 continue
-            stuck += 1
-        else:
-            stuck = 0
-
-        # 动作是结束回合, 或策略提出了非法动作时, 都会推进回合.
-        # 计数器用于中止反复提出同一张不可打出卡牌的策略,
-        # 避免无限重试.
-        if stuck >= 3:
+            outcome = "incomplete:illegal_action"
+            break
+        if action is None or action.kind != "end_turn":
+            outcome = "incomplete:unsupported_action"
             break
         fight.end_turn()
-        fight.turn += 1
         if not fight.over:
+            if fight.turn == max_turns:
+                break
+            fight.turn += 1
             fight.start_turn()
 
+    if fight.won:
+        outcome = "win"
+    elif fight.hp <= 0:
+        outcome = "loss"
     return FightResult(
         won=fight.won,
         turns=fight.turn,
@@ -52,8 +68,9 @@ def run_fight(deck: list[DeckCard], monsters: list[Monster], *, seed: int = 0,
         max_hp=fight.max_hp,
         damage_taken=fight.damage_taken,
         cards_played=fight.cards_played,
-        seed=seed,
-        enemy=", ".join(m.name for m in monsters if m.alive) or ", ".join(m.name for m in monsters),
+        seed=fight.seed,
+        enemy=", ".join(m.name for m in fight.monsters if m.alive) or ", ".join(m.name for m in fight.monsters),
+        outcome=outcome,
     )
 
 
@@ -66,8 +83,9 @@ class BatchResult:
         return len(self.results)
 
     @property
-    def win_rate(self) -> float:
-        return sum(1 for r in self.results if r.won) / self.runs if self.runs else 0.0
+    def win_rate(self) -> Optional[float]:
+        completed = [r for r in self.results if r.outcome in ("win", "loss")]
+        return sum(r.won for r in completed) / len(completed) if completed else None
 
     def summary(self) -> dict[str, Any]:
         if not self.results:
@@ -77,7 +95,10 @@ class BatchResult:
         left = [r.hp_left for r in self.results]
         return {
             "runs": self.runs,
-            "win_rate": round(self.win_rate, 2),
+            "wins": sum(r.outcome == "win" for r in self.results),
+            "losses": sum(r.outcome == "loss" for r in self.results),
+            "incomplete": sum(r.outcome.startswith("incomplete:") for r in self.results),
+            "win_rate": round(self.win_rate, 2) if self.win_rate is not None else None,
             "turns_avg": round(statistics.mean(turns), 1),
             "damage_taken_avg": round(statistics.mean(taken), 1),
             "hp_left_avg": round(statistics.mean(left), 1),
@@ -96,3 +117,15 @@ def run_batch(deck: list[DeckCard], monsters_factory: Callable[[], list[Monster]
         out.results.append(run_fight(
             list(deck), monsters_factory(), seed=seed, hp=hp, max_hp=max_hp, policy=policy))
     return out
+
+
+def run_scenario(scenario: Scenario, *, runs: int = 1,
+                 policy: Policy = decide_state) -> BatchResult:
+    """以文件中的种子为起点连续运行, 每场重新初始化所有状态."""
+    if runs < 1:
+        raise ValueError("运行场数必须大于等于 1")
+    return BatchResult([
+        _play_fight(scenario.create_fight(scenario.seed + offset),
+                    max_turns=scenario.max_turns, policy=policy)
+        for offset in range(runs)
+    ])

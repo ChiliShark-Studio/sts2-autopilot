@@ -163,19 +163,41 @@ def cmd_fight(args: argparse.Namespace) -> int:
     """离线打完整场战斗: 本地模拟器 + 同一个战斗算法, 不连游戏."""
     from .sim import arena, scenarios
 
-    deck = scenarios.starter(args.deck)
-    batch = arena.run_batch(
-        deck, lambda: scenarios.encounter(args.encounter),
-        runs=args.runs, hp=args.hp, max_hp=args.hp,
-    )
+    if args.scenario:
+        from .sim.scenario_file import load
+
+        if args.deck is not None or args.encounter is not None or args.hp is not None:
+            print("--scenario 的牌组, 敌人和血量由文件定义, 不能同时指定 --deck, --encounter 或 --hp",
+                  file=sys.stderr)
+            return 2
+        try:
+            scenario = load(Path(args.scenario))
+            batch = arena.run_scenario(scenario, runs=args.runs if args.runs is not None else 1)
+        except (OSError, ValueError) as exc:
+            print(f"场景加载或模拟失败: {exc}", file=sys.stderr)
+            return 2
+        print(f"场景: {scenario.name}")
+        if scenario.description:
+            print(f"说明: {scenario.description}")
+    else:
+        runs = args.runs if args.runs is not None else 20
+        if runs < 1:
+            print("运行场数必须大于等于 1", file=sys.stderr)
+            return 2
+        hp = args.hp if args.hp is not None else 70
+        deck = scenarios.starter(args.deck or "silent")
+        batch = arena.run_batch(
+            deck, lambda: scenarios.encounter(args.encounter or "nibbit"),
+            runs=runs, hp=hp, max_hp=hp,
+        )
 
     # --verbose 时逐场打印, 否则只给汇总
     if args.verbose:
         for result in batch.results:
-            flag = "胜" if result.won else "负"
+            flag = "胜" if result.won else ("未完成" if result.outcome.startswith("incomplete:") else "负")
             print(f"  seed={result.seed:03d} {flag} {result.turns:2d}回合 "
                   f"剩余{result.hp_left:2d}/{result.max_hp} 掉血{result.damage_taken:2d} "
-                  f"出牌{result.cards_played}")
+                  f"出牌{result.cards_played} 结果={result.outcome}")
 
     print(json.dumps(batch.summary(), ensure_ascii=False, indent=2))
     return 0
@@ -236,11 +258,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # 离线整场战斗
     fight = sub.add_parser("fight", help="离线打完整场战斗（不连游戏、不调 LLM）")
-    fight.add_argument("--deck", default="silent", help="卡组：silent | ironclad")
-    fight.add_argument("--encounter", default="nibbit",
+    fight.add_argument("--scenario", help="从 JSON 文件加载初始状态和敌人行动脚本")
+    fight.add_argument("--deck", help="卡组：silent | ironclad, 默认 silent")
+    fight.add_argument("--encounter",
                        help="遭遇：nibbit | slimes | jaw_worm | lagavulin")
-    fight.add_argument("--runs", type=int, default=20, help="跑多少场")
-    fight.add_argument("--hp", type=int, default=70, help="初始血量")
+    fight.add_argument("--runs", type=int, help="运行场数, 文件场景默认 1, 内置场景默认 20")
+    fight.add_argument("--hp", type=int, help="内置场景的初始血量, 默认 70")
     fight.add_argument("--verbose", action="store_true", help="逐场打印结果")
     fight.set_defaults(func=cmd_fight)
 

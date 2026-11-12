@@ -1,0 +1,88 @@
+{
+  "name": "异蛙寄生虫与四只扭动虫",
+  "description": "使用铁甲战士初始牌组, 包含两阶段, 弃牌堆感染, 感染回合末伤害和扭动虫强化. 使用固定意图轮换, 未模拟遗物, 药水或完整随机敌人 AI.",
+  "seed": 0,
+  "max_turns": 60,
+  "player": {
+    "hp": 80,
+    "max_hp": 80,
+    "max_energy": 3,
+    "status": [],
+    "deck": [
+      {"name": "打击", "count": 5, "cost": 1, "damage": 6, "target_type": "AnyEnemy"},
+      {"name": "防御", "count": 4, "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "痛击", "count": 1, "cost": 2, "damage": 8, "vulnerable": 2, "target_type": "AnyEnemy"}
+    ]
+  },
+  "phases": [
+    {
+      "name": "寄生虫",
+      "enemies": [
+        {
+          "entity_id": "PHROG_PARASITE_0",
+          "name": "异蛙寄生虫",
+          "hp": 63,
+          "status": [],
+          "repeat": true,
+          "intents": [
+            {"type": "custom", "handler": "add_infection", "params": {"count": 3, "pile": "discard_pile"}},
+            {"type": "attack", "damage": 4, "hits": 4}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "扭动虫",
+      "enemies": [
+        {
+          "entity_id": "WRIGGLER_0",
+          "name": "扭动虫",
+          "hp": 17,
+          "repeat": true,
+          "repeat_from": 1,
+          "intents": [
+            {"type": "wait"},
+            {"type": "attack", "damage": 6},
+            {"type": "custom", "handler": "add_infection", "params": {"count": 1, "pile": "discard_pile"}, "strength": 2}
+          ]
+        },
+        {
+          "entity_id": "WRIGGLER_1",
+          "name": "扭动虫",
+          "hp": 20,
+          "repeat": true,
+          "repeat_from": 1,
+          "intents": [
+            {"type": "wait"},
+            {"type": "custom", "handler": "add_infection", "params": {"count": 1, "pile": "discard_pile"}, "strength": 2},
+            {"type": "attack", "damage": 6}
+          ]
+        },
+        {
+          "entity_id": "WRIGGLER_2",
+          "name": "扭动虫",
+          "hp": 19,
+          "repeat": true,
+          "repeat_from": 1,
+          "intents": [
+            {"type": "wait"},
+            {"type": "attack", "damage": 6},
+            {"type": "custom", "handler": "add_infection", "params": {"count": 1, "pile": "discard_pile"}, "strength": 2}
+          ]
+        },
+        {
+          "entity_id": "WRIGGLER_3",
+          "name": "扭动虫",
+          "hp": 18,
+          "repeat": true,
+          "repeat_from": 1,
+          "intents": [
+            {"type": "wait"},
+            {"type": "custom", "handler": "add_infection", "params": {"count": 1, "pile": "discard_pile"}, "strength": 2},
+            {"type": "attack", "damage": 6}
+          ]
+        }
+      ]
+    }
+  ]
+}
