@@ -220,7 +220,8 @@ class _Sim:
             frail=_power(player.powers, _FRAIL),
             duplicate_next=1 if _power(player.powers, _DUPLICATION) else 0,
             weak=_power(player.powers, _WEAK) > 0,
-            shrink=_power(player.powers, _SHRINK) > 0,
+            # 缩小是标记型能力, 层数是 -1, 必须按"存在"判断而不是 > 0.
+                    shrink=_has_power(player.powers, _SHRINK),
             no_block=_power(player.powers, _NO_BLOCK) > 0,
             # 昏眩: 本回合只能打出 1 张牌, 搜索必须按这个上限规划.
             play_limit=1 if _power(player.powers, _RINGING) > 0 else 99,
@@ -276,7 +277,11 @@ class _Sim:
         targets = [self.enemies[target]] if target is not None and target < len(self.enemies) else []
         multiplier = 2 if self.duplicate_next else 1
         self.duplicate_next = 0
-        for _ in range(max(1, card.hits) * multiplier):
+        # 拆卸: 目标有易伤时攻击两次.
+        hits = card.hits
+        if card.hits_if_vulnerable and any(e.vulnerable for e in targets):
+            hits = card.hits_if_vulnerable
+        for _ in range(max(1, hits) * multiplier):
             for enemy in targets:
                 if not enemy.alive:
                     continue
@@ -287,16 +292,18 @@ class _Sim:
                 if card.per_exhaust:
                     base += card.per_exhaust * self.exhausted
                 dmg = base + self.strength
+                # 顺序按游戏结算: 先乘自身减伤 (虚弱/缩小), 再乘目标的易伤/缓慢.
+                # 反过来会先放大再缩水, 结果偏小 (实测重锤 34 会被算成 33).
+                if self.weak:
+                    dmg = int(dmg * 0.75)
+                if self.shrink:
+                    dmg = int(dmg * 0.70)
                 if enemy.vulnerable:
                     dmg = int(dmg * 1.5)
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
                 # 因此攻击牌应当留到最后打, 前置的非攻击牌会抬高后续伤害.
                 if enemy.slow:
                     dmg = int(dmg * (1 + SLOW_STEP * enemy.slow))
-                if self.weak:
-                    dmg = int(dmg * 0.75)
-                if self.shrink:
-                    dmg = int(dmg * 0.70)
                 # 减伤状态逐次限制命中伤害,
                 # 因此多段攻击会更快消耗滑溜层数.
                 if enemy.intangible:

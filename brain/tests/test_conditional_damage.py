@@ -90,6 +90,66 @@ class DamageTests(unittest.TestCase):
         self.assertEqual(enemy.hp, before - 13)
 
 
+SHRUNK_BULLY = {
+    "index": 0, "id": "BULLY", "name": "欺凌", "type": "Attack", "cost": "0",
+    "damage": 0, "hits": 1,
+    # 缩小时桥接把描述算成 2, 基础伤害仍是 4.
+    "description": "造成2点伤害。 该敌人身上每有一层易伤就额外造成2点伤害。",
+    "target_type": "AnyEnemy", "can_play": True,
+}
+
+DISMANTLE = {
+    "index": 0, "id": "DISMANTLE", "name": "拆卸", "type": "Attack", "cost": "1",
+    "damage": 8, "hits": 1,
+    "description": "造成8点伤害。 如果该敌人有易伤状态，则攻击两次。",
+    "target_type": "AnyEnemy", "can_play": True,
+}
+
+
+class ShrinkTests(unittest.TestCase):
+    """缩小是标记型能力 (层数 -1), 攻击伤害 -30%."""
+
+    def _sim(self, hand):
+        raw = state(hand=hand)
+        raw["player"]["status"] = [{"id": "SHRINK_POWER", "name": "缩小", "amount": -1,
+                                    "description": "缩小甲虫存活时，你的攻击伤害减少30%。"}]
+        parsed = GameState.parse(raw)
+        return _Sim.build(parsed.player, parsed.battle)
+
+    def test_shrink_flag_is_detected_with_negative_amount(self):
+        sim = self._sim([{"index": 0, "name": "打击", "cost": "1", "damage": 6,
+                          "hits": 1, "target_type": "AnyEnemy"}])
+        self.assertTrue(sim.shrink)
+
+    def test_shrink_reduces_damage(self):
+        sim = self._sim([{"index": 0, "name": "打击", "cost": "1", "damage": 6,
+                          "hits": 1, "target_type": "AnyEnemy"}])
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 200 - 4)   # int(6 * 0.7)
+
+    def test_shrunk_description_does_not_double_count(self):
+        # 描述已经被缩小算成 2; 若再乘 0.7 会得到 1, 实际应为 2.
+        sim = self._sim([dict(SHRUNK_BULLY)])
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 200 - 2)
+
+
+class ConditionalHitsTests(unittest.TestCase):
+    """拆卸: 目标有易伤时攻击两次."""
+
+    def test_double_hit_when_target_is_vulnerable(self):
+        parsed = GameState.parse(state(hand=[dict(DISMANTLE)], enemy_vuln=1))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 200 - 24)   # 8*1.5 两段
+
+    def test_single_hit_without_vulnerable(self):
+        parsed = GameState.parse(state(hand=[dict(DISMANTLE)], enemy_vuln=0))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.play(0, 0)
+        self.assertEqual(sim.enemies[0].hp, 200 - 8)
+
+
 class DecisionTests(unittest.TestCase):
     def test_bully_is_played_for_free(self):
         decision = decide_state(state(hand=[dict(BULLY)], enemy_vuln=3, energy=0))

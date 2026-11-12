@@ -108,6 +108,8 @@ class Card:
     per_exhaust: int = 0
     # 打出后自身消耗 (战栗/契约终章), 计入灰烬打击的成长.
     exhaust: bool = False
+    # 目标有易伤时的命中段数 (拆卸: 攻击两次).
+    hits_if_vulnerable: int = 0
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -152,6 +154,7 @@ class Card:
             per_vulnerable=parsed.get("per_vulnerable", 0),
             per_exhaust=parsed.get("per_exhaust", 0),
             exhaust=parsed.get("exhaust", False),
+            hits_if_vulnerable=parsed.get("hits_if_vulnerable", 0),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

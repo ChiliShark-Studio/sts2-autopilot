@@ -41,8 +41,20 @@ _BODY_SLAM = re.compile(r"当前格挡值?\s*的伤害")
 _PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点伤害")
 # 灰烬打击: "你的消耗牌堆中每有一张牌，伤害增加3。"
 _PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
+# 拆卸: "如果该敌人有易伤状态，则攻击两次。" 命中段数取决于目标状态.
+_HITS_IF_VULNERABLE = re.compile(r"如果[^。]*?易伤[^。]*?攻击两次")
 # 桥接对"条件伤害"牌会给 0, 这时回到描述里取基础伤害.
 _DAMAGE_TEXT = re.compile(r"造成\s*(\d+)\s*点伤害")
+
+# 条件伤害牌的**原始**数值 (来自游戏内图鉴 data/cards/ironclad.json).
+# 描述里的数字会随虚弱/缩小/易伤变化 (例如缩小后欺凌显示"造成2点伤害"),
+# 用它当基础伤害会把修正算两遍, 因此按 id 固定取值.
+CONDITIONAL_BASE: dict[str, dict[str, int]] = {
+    "BULLY": {"damage": 4, "per_vulnerable": 2},
+    "BULLY+": {"damage": 4, "per_vulnerable": 3},
+    "ASHEN_STRIKE": {"damage": 6, "per_exhaust": 3},
+    "ASHEN_STRIKE+": {"damage": 6, "per_exhaust": 4},
+}
 # 每回合开始的效果 (绯红披风): "在你的回合开始时，失去1点生命并获得8点格挡。"
 _PER_TURN_BLOCK = re.compile(
     r"回合开始时[^。]*?失去\s*(\d+)\s*点生命[^。]*?获得\s*(\d+)\s*点格挡")
@@ -171,6 +183,13 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         m = _DAMAGE_TEXT.search(desc)
         if m:
             damage = _int(m.group(1))
+    # 描述里的数字带上了虚弱/缩小/易伤的修正 (缩小后欺凌会显示"造成2点伤害"),
+    # 按 id 用图鉴里的原始数值覆盖, 否则修正会被算两遍.
+    card_id = card.get("id") or ""
+    key = f"{card_id}+" if card.get("is_upgraded") else card_id
+    fixed = CONDITIONAL_BASE.get(key) or CONDITIONAL_BASE.get(card_id) or {}
+    if fixed:
+        damage = fixed.get("damage", damage)
 
     if "damage" not in card:
         m = _DAMAGE.search(desc)
@@ -208,8 +227,10 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
         "body_slam": bool(_BODY_SLAM.search(desc)),
         # 欺凌 / 灰烬打击: 伤害随易伤层数或消耗堆成长.
-        "per_vulnerable": _first(_PER_VULNERABLE, desc),
-        "per_exhaust": _first(_PER_EXHAUST, desc),
+        "per_vulnerable": fixed.get("per_vulnerable") or _first(_PER_VULNERABLE, desc),
+        "per_exhaust": fixed.get("per_exhaust") or _first(_PER_EXHAUST, desc),
+        # 目标有易伤时多打一段 (拆卸).
+        "hits_if_vulnerable": 2 if _HITS_IF_VULNERABLE.search(desc) else 0,
         # 后续回合的格挡 (坚韧之环): 回合数与每回合格挡分开记, 由搜索按剩余回合折算.
         "future_block_turns": future_block_turns,
         "future_block_per_turn": future_block_per_turn,
