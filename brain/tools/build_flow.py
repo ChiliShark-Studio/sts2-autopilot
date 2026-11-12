@@ -193,13 +193,14 @@ class BuildFlowTool:
             return self._relic_select(request)
         return Decision(action=None, reason=f"未实现的界面: {request.scene}", source=Source.NONE, tool=self.name)
 
-    def _choose(self, request: DecisionRequest, task: str, candidates: list) -> Optional[Decision]:
+    def _choose(self, request: DecisionRequest, task: str, candidates: list,
+                notes: dict | None = None) -> Optional[Decision]:
         # 离线运行没有模型, 走启发式; 有模型时失败只重试, 不退回启发式.
         if self.client is None:
             return None
         decision = choose(self.client, request.state, self.context,
                           task=task, candidates=candidates, tool=self.name,
-                          attempts=LLM_ATTEMPTS)
+                          attempts=LLM_ATTEMPTS, notes=notes)
         if decision is None:
             return no_decision(self.name, f"模型连续 {LLM_ATTEMPTS} 次未给出有效选择")
         return decision
@@ -352,6 +353,24 @@ class BuildFlowTool:
                     candidates.append((-2 - potion.slot, DiscardPotion(potion.slot),
                                        {"说明": "先腾出槽位；下一步重新读取商品和金币后再决定购买",
                                         "discard": asdict(potion), "incoming_potions": potions}))
+        # 不可购买的商品要显式告诉模型原因: 否则它会反复选择售罄的删牌服务.
+        unavailable = []
+        for item in shop.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            index = item.get("index")
+            if index is None:
+                continue
+            reason = None
+            if not item.get("is_stocked"):
+                reason = "已售罄"
+            elif item.get("category") == "potion" and full:
+                reason = "药水槽已满"
+            elif not item.get("can_afford") or int(item.get("price") or 0) > player.gold:
+                reason = "金币不足"
+            if reason:
+                unavailable.append({"index": index, "category": item.get("category"),
+                                    "price": item.get("price"), "reason": reason})
         decision = self._choose(
             request,
             "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。"
@@ -359,8 +378,11 @@ class BuildFlowTool:
             "按标价判断值不值，不要按固定 75 金估算。"
             "牌组还有基础打击或防御时，删牌优先于买新牌；"
             "deck_report.combos_missing 里\"只差一半\"的组合牌，优先级高于普通补强；"
-            "不要为了花掉金币而买填充牌；买不起删牌或关键牌时优先攒钱。",
-            candidates)
+            "不要为了花掉金币而买填充牌；买不起删牌或关键牌时优先攒钱。"
+            "notes.shop_unavailable 列出买不了的商品及原因（售罄/金币不足/药水槽满），"
+            "这些商品不在候选里，不要选择它们。",
+            candidates,
+            notes={"shop_unavailable": unavailable} if unavailable else None)
         if decision is not None:
             if isinstance(decision.action, ShopPurchase):
                 self._shop_bought = True

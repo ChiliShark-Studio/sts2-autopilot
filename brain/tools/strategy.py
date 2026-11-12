@@ -226,12 +226,15 @@ def combat_selection(state: GameState) -> bool:
 
 def choose(client, state: GameState, context: StrategyContext, *, task: str,
            candidates: list[tuple[int, Action, dict]], tool: str,
-           allow_combat: bool = False, attempts: int = 1) -> Decision | None:
+           allow_combat: bool = False, attempts: int = 1,
+           notes: dict | None = None) -> Decision | None:
     """LLM 只能返回现有候选编号，不直接执行它生成的任意动作。
 
     ``allow_combat`` 只用于"战斗内无法模拟的药水"这类必须由模型判断的情况；
     常规出牌决策仍然不得调用模型。
     ``attempts`` 用于模型回复无效时重试；用尽后返回 None，由调用方决定停下。
+    ``notes`` 是补充说明 (例如"哪些商品买不了、为什么"), 会一起进 payload,
+    避免模型反复选择根本不可用的项 (商店删牌售罄时踩过).
     """
     if client is None or not candidates or (combat_selection(state) and not allow_combat):
         return None
@@ -251,6 +254,8 @@ def choose(client, state: GameState, context: StrategyContext, *, task: str,
             for index, action, details in candidates
         ],
     }
+    if notes:
+        payload["notes"] = notes
     actions = {index: action for index, action, _ in candidates}
     note = ""
     for _ in range(max(1, attempts)):
