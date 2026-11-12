@@ -46,6 +46,11 @@ _HITS_IF_VULNERABLE = re.compile(r"如果[^。]*?易伤[^。]*?攻击两次")
 # 桥接对"条件伤害"牌会给 0, 这时回到描述里取基础伤害.
 _DAMAGE_TEXT = re.compile(r"造成\s*(\d+)\s*点伤害")
 
+# 附魔: 关键词里会写"这张牌上的伤害值增加2点"(锋利) 或 "额外造成2点伤害"(浸墨).
+# 结构化 damage 字段不含附魔, 但游戏描述已经算进去了, 必须补上否则伤害偏低.
+_ENCHANT_DAMAGE = re.compile(r"(?:伤害值增加|额外造成)\s*(\d+)\s*点")
+_ENCHANT_BLOCK = re.compile(r"格挡值增加\s*(\d+)\s*点")
+
 # 条件伤害牌的**原始**数值 (来自游戏内图鉴 data/cards/ironclad.json).
 # 描述里的数字会随虚弱/缩小/易伤变化 (例如缩小后欺凌显示"造成2点伤害"),
 # 用它当基础伤害会把修正算两遍, 因此按 id 固定取值.
@@ -174,6 +179,15 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     damage = _field(card, "damage", _DAMAGE)
     block = _field(card, "block", _BLOCK)
     hits = _int(card.get("hits"), 0) if "hits" in card else 0
+
+    # 附魔加成 (锋利/浸墨): 结构化字段不含, 但游戏会把它算进描述里的数字.
+    enchant_text = " ".join(
+        str(k.get("description") or "")
+        for k in (card.get("keywords") or []) if isinstance(k, dict)
+    )
+    if enchant_text:
+        damage += _first(_ENCHANT_DAMAGE, enchant_text)
+        block += _first(_ENCHANT_BLOCK, enchant_text)
 
     # 条件伤害牌 (欺凌/灰烬打击/全身撞击): 桥接按"当前条件"算出 0,
     # 基础伤害要回到描述里取, 否则会被当成 0 伤牌永远不打.

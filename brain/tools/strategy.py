@@ -74,6 +74,8 @@ A10 不要走纯自伤/破裂流（血量波动大，进阶 10 以上不稳）�
   不为一个遗物花光金币：至少留下一次删牌的钱（`situation.shop.next_removal_price`）。
 - 删牌优先级：先删打击，再删防御（基础牌只稀释抽到关键牌的概率）。
 - 升级优先级：先升引擎与斩杀牌，最后才升防御。
+- **针对本幕 Boss 选牌**：`situation.act_boss` 给出已知机制。看到"滑溜"就优先多段攻击，
+  看到"回血/延迟伤害"就别指望拖，看到"击晕窗口"就留爆发；不要只堆单一高伤攻击。
 
 第一幕以活着走下为主：
 - 前五层可以抓高效过渡牌（单卡数值划算、立刻能用），之后不再抓填充牌；
@@ -106,6 +108,32 @@ PAYOFF_CARDS = {
     "契约终章", "灰烬打击", "全身撞击", "欺凌", "踩踏",
 }
 VULNERABLE_SOURCES = {"痛击", "战栗", "上勾拳"}
+
+# 本幕 Boss 的已知机制与选牌对策 (来自游戏内状态与社区 wiki, 用 id 前缀匹配).
+BOSS_PROFILES: tuple[tuple[str, str, str], ...] = (
+    ("VANTOM", "墨影幻灵",
+     "固有滑溜: 每次失去生命只掉 1 点, 单一高伤攻击会被浪费; 优先多段攻击(飞剑回旋镖/连续反弹/双重打击)"),
+    ("CEREMONIAL_BEAST", "仪式兽",
+     "血量降到阈值会被击晕并清零力量: 用多段或爆发在击晕窗口打出, 二阶段会被上昏眩(每回合只能出1张)"),
+    ("WATERFALL_GIANT", "瀑布巨兽",
+     "会回血且有'蒸汽喷发': 击杀后下回合仍要吃伤害, 不能靠拖延, 需要稳定持续输出"),
+    ("THE_KIN", "同族",
+     "召唤小怪: 优先群攻与小怪清理, 别让场面滚雪球"),
+)
+
+
+def boss_profile(state: GameState) -> dict:
+    """当前幕 Boss 的已知机制, 用于针对性选牌."""
+    map_raw = state.raw.get("map") or {}
+    boss = map_raw.get("boss") or {}
+    boss_id = str(boss.get("id") or "")
+    name = str(boss.get("name") or "")
+    for prefix, boss_name, note in BOSS_PROFILES:
+        if boss_id.startswith(prefix) or (name and name == boss_name):
+            return {"name": boss_name, "note": note}
+    if name:
+        return {"name": name, "note": "机制未收录, 只按可见意图判断"}
+    return {}
 
 # 两件套组合: (部件, 缺失的另一半, 说明). 手里有其中一件时优先补另一件.
 COMBOS: tuple[tuple[str, str, str], ...] = (
@@ -222,6 +250,8 @@ def situation(state: GameState, context: StrategyContext) -> dict:
         "previous_build_plan": context.plan,
         # 牌组体检: 引擎/收益件/每回合预期输出, 供模型判断"还缺什么".
         "deck_report": deck_report(state),
+        # 本幕 Boss 的已知机制: 选牌要针对它 (例如滑溜 -> 多段攻击).
+        "act_boss": boss_profile(state),
         "simulation_available": False,
     }
 
