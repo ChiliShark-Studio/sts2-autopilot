@@ -76,6 +76,14 @@ class PromptTests(unittest.TestCase):
             self.assertIn(name, ENGINE_CARDS)
 
 
+    def test_prompt_states_relic_priority(self):
+        prompt = character_prompt(GameState.parse(state(STRIKE)))
+        self.assertIn("遗物", prompt)
+        self.assertIn("优先级低于", prompt)
+        # 遗物不能花光金币: 要留下一次删牌的钱.
+        self.assertIn("next_removal_price", prompt)
+
+
 class ComboTests(unittest.TestCase):
     """两件套: 缺一半时优先补另一半."""
 
