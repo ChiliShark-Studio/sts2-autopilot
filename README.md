@@ -13,6 +13,8 @@ sts2-bridge          →    contracts / router / agents   →   runs/*.jsonl
 
 已确定的目标方案：选路 LLM 结合当前版本攻略规划，构筑 LLM 按角色特点处理选牌、药水取舍、事件、购物与删牌等决策；两者可以调用模拟器，由实际战斗算法评估构筑与候选遭遇。战斗及模拟战斗全程零 LLM。当前仅部分能力已实现，详见 [架构与能力边界](docs/architecture.md) 和 [按序 TODO](docs/TODO.md)。
 
+当前优先完成了选路与构筑的 LLM 接入：共同读取完整卡组、遗物、药水和资源，共享本局构筑计划；支持购物、删牌、选药、事件、遗物和篝火等构筑决策。铁甲战士已有基础构筑提示，版本攻略与模拟器调用后续补充。已通过离线验证，实际模型和真机效果尚未验证。
+
 | 层 | 位置 | 职责 | 状态 |
 | --- | --- | --- | --- |
 | 桥接（游戏内 Mod） | `mod/sts2-bridge/` | 把游戏变成可被程序驱动的状态机 | ✅ 可编译，已加数值字段 |
@@ -93,7 +95,7 @@ python -m brain.cli dry --from captures/combat-001.json   # 离线跑历史状�
 python -m brain.cli combat --from captures/combat-001.json  # 战斗算法独立跑
 python -m brain.cli combat --journal data/combat/run-*.jsonl  # 在战斗数据集上批量跑
 python -m brain.cli replay logs/run-*.jsonl               # 汇总一局的决策分布
-python -m unittest discover -s brain/tests -t .           # 42 个离线测试
+python -m unittest discover -s brain/tests -t .           # 124 个离线测试
 ```
 
 ### 战斗算法（可单独运行）
@@ -146,6 +148,8 @@ python -m brain.cli fight --encounter lagavulin --runs 30   # 几秒钟出结果
 ### LLM 配置
 
 不配也能跑 —— 没有 key、超时、返回非法选项，都会退回启发式，不会卡住整局。
+
+配置后，选路与构筑共用现有 LLM 客户端；启动时不加 `--offline` 即启用。战斗出牌、喝药与战斗内选牌仍使用算法。购物每次只执行一笔，删牌分购买服务和选牌确认，满槽药水替换分丢弃和重新选择领取 / 购买；每步重新读取状态。模型只能返回程序提供的候选编号，不能直接生成任意游戏动作。
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "sk-..."     # 默认 https://api.deepseek.com/v1

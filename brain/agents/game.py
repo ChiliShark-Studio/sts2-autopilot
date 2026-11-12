@@ -28,10 +28,12 @@ class UnsupportedScreen(Exception):
 
 class GameAgent:
     def __init__(self, port: GamePort, *, map_agent, build_agent, combat_agent,
-                 select_agent=None, journal=None, stop_after_run: bool = False) -> None:
+                 select_agent=None, journal=None, stop_after_run: bool = False,
+                 strategy_context=None) -> None:
         self.port = port
         self.journal = journal
         self.stop_after_run = stop_after_run
+        self.strategy_context = strategy_context
         self._character_picked = False
         self._left_menu = False
         self._agents = {
@@ -44,6 +46,8 @@ class GameAgent:
 
     # -- 决策 --
     def decide(self, state: GameState) -> Decision:
+        if self.strategy_context is not None and state.screen in (Screen.MENU, Screen.GAME_OVER):
+            self.strategy_context.reset()
         if state.screen is Screen.GAME_OVER:
             if self.stop_after_run:
                 # 每个进程只运行一局: 在这里停止, 便于先分析日志,

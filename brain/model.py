@@ -34,6 +34,7 @@ class Screen(str, Enum):
     REST = "rest"
     REST_SITE = "rest_site"
     TREASURE = "treasure"
+    RELIC_SELECT = "relic_select"
     HAND_SELECT = "hand_select"
     CARD_SELECT = "card_select"
     BUNDLE_SELECT = "bundle_select"

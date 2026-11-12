@@ -9,10 +9,11 @@
 
 from __future__ import annotations
 
-from ..actions import ConfirmSelection, SelectCard
+from ..actions import CancelSelection, ConfirmSelection, SelectCard
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..model import Card
 from .build_flow import card_score, discard_score
+from .strategy import StrategyContext, choose, combat_selection
 
 UPGRADE_HINTS = ("升级", "强化", "变为")
 KEEP_HINTS = ("保留", "复制")
@@ -20,6 +21,10 @@ KEEP_HINTS = ("保留", "复制")
 
 class SelectTool:
     name = "select_tool"
+
+    def __init__(self, client=None, context: StrategyContext | None = None) -> None:
+        self.client = client
+        self.context = context if context is not None else StrategyContext()
 
     def _in_combat_picker(self, state) -> bool:
         # ``combat_select_card`` 只适用于战斗内手牌选择;
@@ -58,6 +63,21 @@ class SelectTool:
         if not unselected:
             return Decision(action=self._confirm(state), reason="已选满，确认",
                             source=Source.SCRIPT, tool=self.name)
+
+        if not combat_selection(state):
+            from dataclasses import asdict
+
+            candidates = [(c.index, self._select(state, c.index), asdict(c)) for c in unselected]
+            raw_picker = state.raw.get("card_select") or state.raw.get("hand_select") or {}
+            if raw_picker.get("can_skip"):
+                candidates.append((-1, CancelSelection(), {"说明": "跳过本次选牌"}))
+            decision = choose(
+                self.client, state, self.context,
+                task=f"构筑选牌：类型={picker.mode}，提示={picker.prompt}。永久删牌、升级、变化或复制需要服务于当前构筑。",
+                candidates=candidates, tool=self.name,
+            )
+            if decision is not None:
+                return decision
 
         prompt = picker.prompt
         if any(hint in prompt for hint in UPGRADE_HINTS) or any(hint in prompt for hint in KEEP_HINTS):

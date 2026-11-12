@@ -1,16 +1,16 @@
-"""构筑工具: 处理奖励和选牌, 其他界面暂不处理.
+"""构筑工具：LLM 根据角色和完整局面选择，启发式处理离线与失败路径。
 
 流程基于真实对局中发现的两条规则:
 
 * ``skip_card_reward`` 不会消耗卡牌奖励条目, 再次领取会重开选牌界面,
   看起来像卡住. 正确顺序是先领取实际物品, 只打开一次选牌, 选择后继续前进.
-* 未处理的构筑界面 (商店, 事件, 篝火) 不执行动作,
-  返回空动作使主循环停下供人工检查, 避免盲目点击.
+* 每次只返回一个合法动作，购物和药水替换后重新读取状态。
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import Optional
 
 from ..actions import (
@@ -19,15 +19,19 @@ from ..actions import (
     ClaimReward,
     ClaimTreasureRelic,
     ConfirmBundleSelection,
+    DiscardPotion,
     Proceed,
     RestOption,
     SelectBundle,
     SelectCardReward,
+    SelectRelic,
     ShopPurchase,
     SkipCardReward,
+    SkipRelicSelection,
 )
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..model import Card
+from .strategy import StrategyContext, choose
 
 RARITY_BONUS = {"Basic": 0.0, "Common": 0.3, "Uncommon": 0.9, "Rare": 1.8}
 SKIP_THRESHOLD = 2.0
@@ -59,18 +63,6 @@ def discard_score(card: Card) -> float:
 # 商店策略: 保留一定金币, 只购买明显有价值的卡牌.
 SHOP_RESERVE = 40
 SHOP_CARD_THRESHOLD = 3.0
-
-
-CARD_SYSTEM_PROMPT = """你是《杀戮尖塔2》的构筑助手。为当前卡组从卡牌奖励里选一张，或跳过。
-
-判断原则：
-- 卡组质量比数量重要：没有明显补强的牌就跳过（choice=-1）。
-- 缺格挡补格挡，缺输出补输出；基础牌已经够多时优先功能牌。
-- 纯数值小、与卡组无配合的牌不要拿。
-- 缩放牌（伤害随牌组变化）、能力牌通常比同费用的白板强。
-
-只输出 JSON：{"choice": <index 或 -1>, "reason": "<40字内>"}
-"""
 
 
 def _card_dict_value(card: dict) -> float:
@@ -105,7 +97,7 @@ _HEAL_EVENT = re.compile(r"回复\s*(\d+)\s*点生命")
 _MAX_HP_GAIN = re.compile(r"获得\s*(\d+)\s*点最大生命")
 _LEAVE_HINTS = ("放弃", "离开", "结束", "不读了")
 
-# 事件选择不得突破以下安全阈值.
+# 离线事件启发式使用的代价阈值。
 EVENT_HP_FLOOR = 15
 EVENT_MAX_HP_LOSS_RATIO = 0.15
 EVENT_COST_WEIGHT = 1.5
@@ -157,14 +149,21 @@ def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
 class BuildFlowTool:
     name = "build_flow"
 
-    def __init__(self, client=None) -> None:
+    def __init__(self, client=None, context: Optional[StrategyContext] = None) -> None:
         # 可选的 LLM 选牌: 启发式难以评价成长型卡牌,
         # 例如完美打击和破灭, 因此此前总是选择铁斩波等普通数值牌.
         self.client = client
+        self.context = context if context is not None else StrategyContext()
         self._pending_card_open = False
         self._shop_bought = False
+        self._location = None
 
     def decide(self, request: DecisionRequest) -> Decision:
+        location = (request.state.run.act, request.state.run.floor)
+        if location != self._location:
+            self._pending_card_open = False
+            self._shop_bought = False
+            self._location = location
         if request.scene == "card_reward":
             return self._card_reward(request)
         if request.scene == "rewards":
@@ -179,27 +178,25 @@ class BuildFlowTool:
             return self._shop(request)
         if request.scene == "bundle_select":
             return self._bundle(request)
-        # 商店 / 宝箱: 暂不实现.
+        if request.scene == "relic_select":
+            return self._relic_select(request)
         return Decision(action=None, reason=f"未实现的界面: {request.scene}", source=Source.NONE, tool=self.name)
+
+    def _choose(self, request: DecisionRequest, task: str, candidates: list) -> Optional[Decision]:
+        return choose(self.client, request.state, self.context,
+                      task=task, candidates=candidates, tool=self.name)
 
     def _card_reward(self, request: DecisionRequest) -> Decision:
         cards = request.state.card_reward
         if not cards:
             return Decision(action=SkipCardReward(), reason="没有可选卡", source=Source.HEURISTIC, tool=self.name)
 
-        if self.client is not None:
-            choice, reason, extra = self._llm_card_choice(request)
-            if choice is None:
-                # -1 表示模型希望跳过; 非法结果退回启发式.
-                pass
-            elif choice == -1:
-                self._pending_card_open = True
-                return Decision(action=SkipCardReward(), reason=reason or "跳过（模型）",
-                                source=Source.LLM, tool=self.name, extra=extra)
-            else:
-                self._pending_card_open = True
-                return Decision(action=SelectCardReward(choice), reason=reason,
-                                source=Source.LLM, tool=self.name, extra=extra)
+        candidates = [(c.index, SelectCardReward(c.index), asdict(c)) for c in cards]
+        candidates.append((-1, SkipCardReward(), {"说明": "跳过卡牌奖励"}))
+        decision = self._choose(request, "选择一张奖励牌或跳过；没有明显补强时不要扩大卡组。", candidates)
+        if decision is not None:
+            self._pending_card_open = True
+            return decision
 
         best = max(cards, key=lambda c: (card_score(c), -c.index))
         score = card_score(best)
@@ -209,43 +206,6 @@ class BuildFlowTool:
         self._pending_card_open = True
         return Decision(action=SelectCardReward(best.index), reason=f"选 {best.name}（{score:.1f}）",
                         source=Source.HEURISTIC, tool=self.name)
-
-    def _llm_card_choice(self, request: DecisionRequest) -> tuple[Optional[int], str, dict]:
-        """请求模型选牌, -1 表示跳过; 失败时返回 (None, _, _)."""
-        state = request.state
-        player = state.player
-        candidates = state.card_reward
-        valid = {c.index for c in candidates}
-
-        deck = "、".join(c.name for c in player.deck[:40]) or "空"
-        lines = [
-            f"当前：{player.character} 第{state.run.floor}层 血量{player.hp}/{player.max_hp} 金币{player.gold}",
-            f"卡组（{len(player.deck)}张）：{deck}",
-            "",
-            "候选卡牌：",
-        ]
-        for card in candidates:
-            lines.append(
-                f"- index={card.index} {card.name} | 费用{card.cost} | {card.type} | "
-                f"{card.rarity} | {card.description}"
-            )
-        lines.append("")
-        lines.append('只输出 JSON：{"choice": <index 或 -1 表示跳过>, "reason": "<40字内>"}')
-
-        reply = self.client.json_chat(CARD_SYSTEM_PROMPT, "\n".join(lines))
-        if reply is None:
-            return None, "", {}
-        extra = {"llm": dict(self.client.last_meta or {})}
-        raw = reply.get("choice")
-        try:
-            choice = int(raw)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return None, "", {}
-        if choice == -1:
-            return -1, str(reply.get("reason") or "跳过"), extra
-        if choice not in valid:
-            return None, "", {}
-        return choice, str(reply.get("reason") or ""), extra
 
     def _event(self, request: DecisionRequest) -> Decision:
         """选择收益与代价更合适的选项, 避免不断付出生命.
@@ -262,6 +222,12 @@ class BuildFlowTool:
         if not options:
             # 事件换页时会重建按钮, 暂时没有选项属于过渡状态.
             return WAIT
+
+        decision = self._choose(request, f"选择事件选项：{event.get('event_name', '')}。结合构筑收益和生命、金币等代价。",
+                                [(int(o.get("index", 0)), ChooseEventOption(int(o.get("index", 0))), o)
+                                 for o in options])
+        if decision is not None:
+            return decision
 
         player = request.state.player
         scored: list[tuple[float, int, dict]] = []
@@ -298,6 +264,12 @@ class BuildFlowTool:
         if not options:
             return WAIT
 
+        decision = self._choose(request, "选择篝火行动：权衡恢复与构筑升级的收益。",
+                                [(int(o.get("index", 0)), RestOption(int(o.get("index", 0))), o)
+                                 for o in options])
+        if decision is not None:
+            return decision
+
         # 提示名称会随语言变化, id 保持稳定.
         want = "HEAL" if request.state.player.hp_ratio < 0.6 else "SMITH"
         pick = next((o for o in options if str(o.get("id")).upper() == want), options[0])
@@ -310,6 +282,13 @@ class BuildFlowTool:
         treasure = request.state.raw.get("treasure") or {}
         relics = [r for r in (treasure.get("relics") or []) if isinstance(r, dict)]
         if relics:
+            candidates = [(int(r.get("index", 0)), ClaimTreasureRelic(int(r.get("index", 0))), r)
+                          for r in relics]
+            if treasure.get("can_proceed"):
+                candidates.append((-1, Proceed(), {"说明": "放弃剩余遗物并离开"}))
+            decision = self._choose(request, "选择宝箱遗物，结合效果及当前构筑判断。", candidates)
+            if decision is not None:
+                return decision
             pick = relics[0]
             return Decision(action=ClaimTreasureRelic(int(pick.get("index", 0))),
                             reason=f"拿取 {pick.get('name', '遗物')}",
@@ -319,9 +298,34 @@ class BuildFlowTool:
         return WAIT
 
     def _shop(self, request: DecisionRequest) -> Decision:
-        """最多购买一张高价值卡牌后离开, 保留一定金币."""
+        """LLM 每次选择一笔购买或离开；离线仍使用简单购卡策略。"""
         shop = request.state.raw.get("shop") or {}
-        if shop.get("can_proceed") or self._shop_bought:
+        if not shop or shop.get("error"):
+            return WAIT
+        player = request.state.player
+        full = len(player.potions) >= player.max_potion_slots
+        items = [item for item in shop.get("items") or []
+                 if isinstance(item, dict) and item.get("is_stocked") and item.get("can_afford")
+                 and item.get("category") in {"card", "relic", "potion", "card_removal"}
+                 and 0 <= int(item.get("price") or 0) <= player.gold]
+        candidates = [(int(item.get("index", 0)), ShopPurchase(int(item.get("index", 0))), item)
+                      for item in items if item.get("category") != "potion" or not full]
+        # 商店库存展开时 proceed 可能未启用；桥接的 proceed 会先关闭库存再离开。
+        candidates.append((-1, Proceed(), {"说明": "留钱并离开商店"}))
+        if full and player.max_potion_slots > 0:
+            potions = [item for item in items if item.get("category") == "potion"]
+            if potions:
+                for potion in player.potions:
+                    candidates.append((-2 - potion.slot, DiscardPotion(potion.slot),
+                                       {"说明": "先腾出槽位；下一步重新读取商品和金币后再决定购买",
+                                        "discard": asdict(potion), "incoming_potions": potions}))
+        decision = self._choose(request, "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。", candidates)
+        if decision is not None:
+            if isinstance(decision.action, ShopPurchase):
+                self._shop_bought = True
+            return decision
+
+        if self._shop_bought:
             self._shop_bought = False
             return Decision(action=Proceed(), reason="离开商店", source=Source.SCRIPT, tool=self.name)
 
@@ -360,6 +364,12 @@ class BuildFlowTool:
         if not bundles:
             return WAIT
 
+        decision = self._choose(request, "选择与当前构筑配合的卡牌包。",
+                                [(int(b.get("index", 0)), SelectBundle(int(b.get("index", 0))), b)
+                                 for b in bundles])
+        if decision is not None:
+            return decision
+
         def value(item: dict) -> float:
             return sum(_card_dict_value(c) for c in (item.get("cards") or []) if isinstance(c, dict))
 
@@ -368,12 +378,51 @@ class BuildFlowTool:
                         reason=f"选价值最高的一包（{value(best):.1f}）",
                         source=Source.HEURISTIC, tool=self.name)
 
+    def _relic_select(self, request: DecisionRequest) -> Decision:
+        raw = request.state.raw.get("relic_select") or {}
+        relics = [r for r in raw.get("relics") or [] if isinstance(r, dict)]
+        candidates = [(int(r.get("index", 0)), SelectRelic(int(r.get("index", 0))), r) for r in relics]
+        if raw.get("can_skip"):
+            candidates.append((-1, SkipRelicSelection(), {"说明": "跳过遗物选择"}))
+        decision = self._choose(request, "选择遗物或在允许时跳过，考虑构筑配合与负面效果。", candidates)
+        if decision is not None:
+            return decision
+        if relics:
+            return Decision(action=SelectRelic(int(relics[0].get("index", 0))),
+                            reason="无有效模型选择，取第一个遗物", source=Source.HEURISTIC, tool=self.name)
+        if raw.get("can_skip"):
+            return Decision(action=SkipRelicSelection(), reason="没有遗物候选，跳过",
+                            source=Source.HEURISTIC, tool=self.name)
+        return WAIT
+
     def _rewards(self, request: DecisionRequest) -> Decision:
         raw = request.state.raw.get("rewards") or {}
         items = request.state.rewards
         can_proceed = bool(raw.get("can_proceed"))
         player = request.state.player
         potions_full = len(player.potions) >= player.max_potion_slots
+
+        # 金币不涉及构筑取舍，先领取以减少不必要的模型调用。
+        gold = next((r for r in items if r.type == "gold"), None)
+        if gold is not None:
+            return Decision(action=ClaimReward(gold.index), reason="领取金币",
+                            source=Source.SCRIPT, tool=self.name)
+
+        raw_items = {r.get("index"): r for r in raw.get("items") or [] if isinstance(r, dict)}
+        candidates = [(r.index, ClaimReward(r.index), raw_items.get(r.index, asdict(r)))
+                      for r in items if not (r.type == "potion" and potions_full)
+                      and not (r.type == "card" and self._pending_card_open)]
+        if can_proceed:
+            candidates.append((-1, Proceed(), {"说明": "放弃剩余奖励并离开"}))
+        incoming = [raw_items.get(r.index, asdict(r)) for r in items if r.type == "potion"]
+        if potions_full and incoming and player.max_potion_slots > 0:
+            for potion in player.potions:
+                candidates.append((-2 - potion.slot, DiscardPotion(potion.slot),
+                                   {"说明": "先丢弃现有药水；下一步重读奖励索引再领取",
+                                    "discard": asdict(potion), "incoming_potions": incoming}))
+        decision = self._choose(request, "领取奖励或离开；药水槽满时可先丢弃旧药水，为更合适的奖励腾出位置。", candidates)
+        if decision is not None:
+            return decision
 
         # 药水槽位已满时无法领取药水奖励, 重复领取会导致卡住,
         # 因此将其视为不可领取并继续前进.

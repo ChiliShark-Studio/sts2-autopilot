@@ -20,6 +20,7 @@ from .tools.build_flow import BuildFlowTool
 from .tools.combat_search import CombatSearchTool
 from .tools.map_router import MapRouterTool
 from .tools.select_tool import SelectTool
+from .tools.strategy import StrategyContext
 from .transport import Bridge
 
 DEFAULT_BASE = "http://127.0.0.1:15526"
@@ -30,12 +31,14 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
                 stop_after_run: bool = False) -> GameAgent:
     client = None if offline else LLMClient.from_env()
     journal = Journal.create(journal_dir) if journal_dir else None
+    context = StrategyContext()
     return GameAgent(
         Bridge(base),
-        map_agent=MapAgent(MapRouterTool(client)),
-        build_agent=BuildAgent(BuildFlowTool(client)),
+        map_agent=MapAgent(MapRouterTool(client, context)),
+        build_agent=BuildAgent(BuildFlowTool(client, context)),
         combat_agent=CombatAgent(CombatSearchTool()),
-        select_agent=SelectAgent(SelectTool()),
+        select_agent=SelectAgent(SelectTool(client, context)),
+        strategy_context=context,
         journal=journal,
         stop_after_run=stop_after_run,
     )

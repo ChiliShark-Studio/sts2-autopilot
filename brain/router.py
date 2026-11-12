@@ -10,7 +10,7 @@ from .model import GameState, Screen
 # 构筑单元负责卡组构筑, 以及战斗, 路线和菜单之外的界面.
 # 这些界面统一交给构筑工具处理.
 BUILD_SCENES = frozenset({"card_reward", "rewards", "shop", "event", "rest", "rest_site",
-                          "treasure", "bundle_select"})
+                          "treasure", "bundle_select", "relic_select"})
 
 
 def route(state: GameState) -> Optional[DecisionRequest]:

@@ -100,6 +100,25 @@ class UsePotion(Action):
 
 
 @dataclass(frozen=True)
+class DiscardPotion(Action):
+    slot: int = 0
+
+    def __init__(self, slot: int) -> None:
+        object.__setattr__(self, "kind", "discard_potion")
+        object.__setattr__(self, "slot", slot)
+
+    def check(self, state: GameState) -> None:
+        if self.slot not in {p.slot for p in state.player.potions}:
+            raise ActionError(f"药水槽位 {self.slot} 为空或不存在")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"action": "discard_potion", "slot": self.slot}
+
+    def describe(self) -> str:
+        return f"丢弃药水 槽位{self.slot}"
+
+
+@dataclass(frozen=True)
 class ChooseMapNode(Action):
     option: int = 0
 
@@ -327,6 +346,16 @@ class ShopPurchase(Action):
     def to_payload(self) -> dict[str, Any]:
         return {"action": "shop_purchase", "index": self.index}
 
+    def check(self, state: GameState) -> None:
+        item = next((item for item in (state.raw.get("shop") or {}).get("items", [])
+                     if isinstance(item, dict) and item.get("index") == self.index), None)
+        if not item or not item.get("is_stocked") or not item.get("can_afford"):
+            raise ActionError("商品已售罄、不可购买或金币不足")
+        if int(item.get("price") or 0) > state.player.gold:
+            raise ActionError("当前金币不足")
+        if item.get("category") == "potion" and len(state.player.potions) >= state.player.max_potion_slots:
+            raise ActionError("药水槽位已满")
+
     def describe(self) -> str:
         return f"购买商品 {self.index}"
 
@@ -344,6 +373,41 @@ class ClaimTreasureRelic(Action):
 
     def describe(self) -> str:
         return f"拿取遗物 {self.index}"
+
+
+@dataclass(frozen=True)
+class SelectRelic(Action):
+    index: int = 0
+
+    def __init__(self, index: int) -> None:
+        object.__setattr__(self, "kind", "select_relic")
+        object.__setattr__(self, "index", index)
+
+    def check(self, state: GameState) -> None:
+        relics = (state.raw.get("relic_select") or {}).get("relics") or []
+        if self.index not in {r.get("index") for r in relics if isinstance(r, dict)}:
+            raise ActionError("遗物候选不存在")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"action": "select_relic", "index": self.index}
+
+    def describe(self) -> str:
+        return f"选择遗物 {self.index}"
+
+
+@dataclass(frozen=True)
+class SkipRelicSelection(Action):
+    kind: str = "skip_relic_selection"
+
+    def check(self, state: GameState) -> None:
+        if not (state.raw.get("relic_select") or {}).get("can_skip"):
+            raise ActionError("当前遗物选择不能跳过")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"action": "skip_relic_selection"}
+
+    def describe(self) -> str:
+        return "跳过遗物选择"
 
 
 @dataclass(frozen=True)
