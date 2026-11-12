@@ -245,6 +245,11 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "per_exhaust": fixed.get("per_exhaust") or _first(_PER_EXHAUST, desc),
         # 目标有易伤时多打一段 (拆卸).
         "hits_if_vulnerable": 2 if _HITS_IF_VULNERABLE.search(desc) else 0,
+        # 游戏算好的逐目标伤害 (新桥接提供; 旧桥接没有就留空, 由本地模型兜底).
+        "damage_by_target": {
+            str(k): _int(v)
+            for k, v in (card.get("damage_by_target") or {}).items()
+        } if isinstance(card.get("damage_by_target"), dict) else {},
         # 后续回合的格挡 (坚韧之环): 回合数与每回合格挡分开记, 由搜索按剩余回合折算.
         "future_block_turns": future_block_turns,
         "future_block_per_turn": future_block_per_turn,

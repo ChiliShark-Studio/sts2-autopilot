@@ -110,6 +110,8 @@ class Card:
     exhaust: bool = False
     # 目标有易伤时的命中段数 (拆卸: 攻击两次).
     hits_if_vulnerable: int = 0
+    # 游戏自己算好的单次命中伤害, 按敌人 entity_id 给出 (含力量/易伤/附魔/遗物).
+    damage_by_target: dict[str, int] = field(default_factory=dict)
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -155,6 +157,7 @@ class Card:
             per_exhaust=parsed.get("per_exhaust", 0),
             exhaust=parsed.get("exhaust", False),
             hits_if_vulnerable=parsed.get("hits_if_vulnerable", 0),
+            damage_by_target=dict(parsed.get("damage_by_target") or {}),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

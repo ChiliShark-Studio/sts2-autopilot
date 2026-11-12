@@ -285,24 +285,32 @@ class _Sim:
             for enemy in targets:
                 if not enemy.alive:
                     continue
-                # 条件伤害: 全身撞击用格挡, 欺凌按易伤层数, 灰烬打击按消耗数.
-                base = self.block if card.body_slam else card.damage
-                if card.per_vulnerable:
-                    base += card.per_vulnerable * enemy.vulnerable
-                if card.per_exhaust:
-                    base += card.per_exhaust * self.exhausted
-                dmg = base + self.strength
-                # 顺序按游戏结算: 先乘自身减伤 (虚弱/缩小), 再乘目标的易伤/缓慢.
-                # 反过来会先放大再缩水, 结果偏小 (实测重锤 34 会被算成 33).
-                if self.weak:
-                    dmg = int(dmg * 0.75)
-                if self.shrink:
-                    dmg = int(dmg * 0.70)
-                if enemy.vulnerable:
-                    dmg = int(dmg * 1.5)
+                # 游戏自己算好的伤害: 只在"本回合第一张牌"时等价于当前状态, 直接用.
+                # 后续牌会改变缓慢/易伤层数, 用本地模型推算.
+                game_damage = (card.damage_by_target.get(enemy.entity_id)
+                               if self.cards_played == 1 and card.damage_by_target else None)
+                if game_damage is not None:
+                    dmg = game_damage
+                else:
+                    # 条件伤害: 全身撞击用格挡, 欺凌按易伤层数, 灰烬打击按消耗数.
+                    base = self.block if card.body_slam else card.damage
+                    if card.per_vulnerable:
+                        base += card.per_vulnerable * enemy.vulnerable
+                    if card.per_exhaust:
+                        base += card.per_exhaust * self.exhausted
+                    dmg = base + self.strength
+                    # 顺序按游戏结算: 先乘自身减伤 (虚弱/缩小), 再乘目标的易伤/缓慢.
+                    # 反过来会先放大再缩水, 结果偏小 (实测重锤 34 会被算成 33).
+                    if self.weak:
+                        dmg = int(dmg * 0.75)
+                    if self.shrink:
+                        dmg = int(dmg * 0.70)
+                    if enemy.vulnerable:
+                        dmg = int(dmg * 1.5)
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
                 # 因此攻击牌应当留到最后打, 前置的非攻击牌会抬高后续伤害.
-                if enemy.slow:
+                # 游戏给的数字已经包含缓慢, 不能重复乘.
+                if game_damage is None and enemy.slow:
                     dmg = int(dmg * (1 + SLOW_STEP * enemy.slow))
                 # 减伤状态逐次限制命中伤害,
                 # 因此多段攻击会更快消耗滑溜层数.

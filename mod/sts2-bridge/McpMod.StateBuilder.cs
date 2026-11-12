@@ -1131,7 +1131,8 @@ public static partial class McpMod
             int cardIndex = 0;
             foreach (var card in combatState.Hand.Cards)
             {
-                hand.Add(BuildCardState(card, cardIndex));
+                var battleState = CombatManager.Instance.DebugOnlyGetState();
+                hand.Add(BuildCardState(card, cardIndex, battleState?.Enemies?.ToList()));
                 cardIndex++;
             }
             state["hand"] = hand;
@@ -1276,7 +1277,8 @@ public static partial class McpMod
         };
     }
 
-    private static Dictionary<string, object?> BuildCardState(CardModel card, int index)
+    private static Dictionary<string, object?> BuildCardState(CardModel card, int index,
+        IReadOnlyList<Creature>? enemies = null)
     {
         card.CanPlay(out var unplayableReason, out _);
 
@@ -1299,6 +1301,36 @@ public static partial class McpMod
         state["hits"] = Math.Max(1, VarInt(vars, "Repeat"));
         state["vulnerable"] = VarInt(vars, "Vulnerable");
         state["weak"] = VarInt(vars, "Weak");
+
+        // 游戏自己算出的伤害: 逐个存活敌人调用官方预览接口,
+        // 这样力量/易伤/虚弱/缩小/附魔/遗物全部由游戏计算, 客户端不用再拼修正.
+        // 每项是"单次命中"的伤害, 多段牌由调用方乘以段数.
+        if (enemies is { Count: > 0 } && card.Type.ToString() == "Attack")
+        {
+            try
+            {
+                var byTarget = new Dictionary<string, object?>();
+                var counts = new Dictionary<string, int>();
+                foreach (var enemy in enemies)
+                {
+                    if (!enemy.IsAlive) continue;
+                    string baseId = enemy.Monster?.Id.Entry ?? "unknown";
+                    if (!counts.TryGetValue(baseId, out int count)) count = 0;
+                    counts[baseId] = count + 1;
+                    string entityId = $"{baseId}_{count}";
+
+                    card.UpdateDynamicVarPreview(CardPreviewMode.Normal, enemy, vars);
+                    byTarget[entityId] = VarInt(vars, "Damage");
+                }
+                // 复原变量, 避免影响游戏自己的卡面显示.
+                card.UpdateDynamicVarPreview(CardPreviewMode.None, null!, vars);
+                state["damage_by_target"] = byTarget;
+            }
+            catch
+            {
+                // 预览失败就不输出该字段, 调用方回退到自己的伤害模型.
+            }
+        }
         return state;
     }
 
