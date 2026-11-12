@@ -20,8 +20,10 @@ from brain.tests.test_map_router import MAP
 
 
 def client_with(*replies):
+    """按顺序返回回复; 用完最后一个回复后持续重复它, 便于测试重试逻辑."""
     client = make_mock_client({})
-    client.json_chat = Mock(side_effect=replies)
+    client.json_chat = Mock(side_effect=lambda system, user: replies[min(client.json_chat.call_count - 1,
+                                                                         len(replies) - 1)])
     return client
 
 
@@ -92,7 +94,7 @@ class StrategyFlowTests(unittest.TestCase):
         self.assertEqual(payload["situation"]["player"]["gold"], 35)
         self.assertEqual([c["choice"] for c in payload["candidates"]], [-1])
 
-    def test_unavailable_shop_choices_fall_back_without_buying(self):
+    def test_unavailable_shop_choices_never_get_bought(self):
         shop = copy.deepcopy(SHOP)
         for item in shop["shop"]["items"]:
             item["is_stocked"] = False
@@ -100,8 +102,9 @@ class StrategyFlowTests(unittest.TestCase):
             with self.subTest(choice=choice):
                 client = client_with({"choice": choice})
                 decision = BuildFlowTool(client).decide(request(shop, "shop"))
+                # 不可购买的选项不会被执行: 模型连续给出非法选择时停下.
+                self.assertIsNone(decision.action)
                 self.assertIsNot(decision.source, Source.LLM)
-                self.assertEqual(decision.action.kind, "proceed")
 
     def test_offline_shop_can_purchase_then_leave(self):
         tool = BuildFlowTool()
@@ -140,16 +143,17 @@ class StrategyFlowTests(unittest.TestCase):
     def test_shop_full_belt_never_directly_buys_potion(self):
         shop = copy.deepcopy(SHOP)
         shop["player"].update(max_potion_slots=1, potions=[{"slot": 0, "id": "OLD"}])
-        client = client_with({"choice": 2}, {"choice": -2}, {"choice": -1})
+        client = client_with({"choice": 2})
         tool = BuildFlowTool(client)
-        self.assertIsNot(tool.decide(request(shop, "shop")).source, Source.LLM)
         decision = tool.decide(request(shop, "shop"))
-        self.assertEqual(decision.action.to_payload(), {"action": "discard_potion", "slot": 0})
-        shop["player"]["potions"] = []
-        shop["player"]["gold"] = 0
-        self.assertEqual(tool.decide(request(shop, "shop")).action.kind, "proceed")
         payload = json.loads(client.json_chat.call_args.args[1])
-        self.assertEqual([c["choice"] for c in payload["candidates"]], [-1])
+        # 满槽时在售药水不出现在直接购买候选里.
+        direct = [c for c in payload["candidates"]
+                  if c["action"].get("action") == "shop_purchase"
+                  and (c.get("details") or {}).get("category") == "potion"]
+        self.assertEqual(direct, [])
+        # 模型给的是"买药水"这个不存在的选项, 因此不会执行任何购买.
+        self.assertIsNone(decision.action)
 
     def test_event_rest_bundle_and_relic_scenes_use_llm(self):
         scenes = [
@@ -190,7 +194,7 @@ class StrategyFlowTests(unittest.TestCase):
         raw = {"state_type": "relic_select", "relic_select": {"relics": [{"index": 0}]}}
         with self.assertRaises(ActionError):
             SkipRelicSelection().check(GameState.parse(raw))
-        client = client_with({"choice": -1}, {"choice": -1})
+        client = client_with({"choice": 0}, {"choice": -1})
         tool = BuildFlowTool(client)
         self.assertEqual(tool.decide(request(raw, "relic_select")).action.kind, "select_relic")
         raw["relic_select"]["can_skip"] = True
@@ -207,7 +211,8 @@ class StrategyContextTests(unittest.TestCase):
             relics=[{"id": "R", "description": "遗物效果", "counter": 2}],
             potions=[{"id": "P", "slot": 2, "description": "药水效果"}],
         )
-        client = client_with({"choice": 0, "build_plan": "需要删牌，考虑商店"}, {"choice": 1})
+        client = client_with({"choice": 0, "build_plan": "需要删牌，考虑商店"},
+                             {"route": [[0, 1]], "reason": "测试路线"})
         with patch("brain.factory.LLMClient.from_env", return_value=client):
             agent = build_agent()
         agent.decide(GameState.parse(state))
@@ -218,7 +223,13 @@ class StrategyContextTests(unittest.TestCase):
         self.assertEqual(first["player"]["potions"][0]["description"], "药水效果")
         route = copy.deepcopy(MAP)
         route["player"] = state["player"]
-        route["map"]["nodes"] = [{"row": 1, "col": 0, "children": [{"row": 2, "col": 1}]}]
+        route["map"]["next_options"] = [
+            {"index": 0, "col": 0, "row": 1, "type": "Monster"},
+            {"index": 1, "col": 1, "row": 1, "type": "Monster"},
+        ]
+        route["map"]["nodes"] = [{"row": 1, "col": 0, "children": [{"row": 2, "col": 1}]},
+                                 {"row": 1, "col": 1, "children": [{"row": 2, "col": 1}]},
+                                 {"row": 2, "col": 1, "type": "Monster", "children": []}]
         decision = agent.decide(GameState.parse(route))
         second = json.loads(client.json_chat.call_args.args[1])["situation"]
         self.assertIn("需要删牌", second["previous_build_plan"])
@@ -231,6 +242,11 @@ class StrategyContextTests(unittest.TestCase):
     def test_other_character_does_not_receive_ironclad_rules(self):
         prompt = character_prompt(GameState.parse({"player": {"character": "静默猎手"}}))
         self.assertIn("尚无该角色专用攻略", prompt)
+
+    def test_ironclad_prompt_includes_campfire_rule(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("篝火默认锻造", prompt)
+        self.assertIn("不要超过本幕篝火总数的一半", prompt)
 
     def test_battle_and_combat_pickers_never_call_llm(self):
         client = client_with()
@@ -270,7 +286,8 @@ class StrategyContextTests(unittest.TestCase):
             client = client_with(reply)
             decision = MapRouterTool(client, context).decide(
                 DecisionRequest(kind=DecisionKind.MAP, state=GameState.parse(MAP)))
-            self.assertIs(decision.source, Source.HEURISTIC)
+            # 模型给出无效结果时停下, 既不猜动作, 也不覆盖已有计划.
+            self.assertIsNone(decision.action)
             self.assertEqual(context.plan, "原有计划")
 
     def test_action_validation_rejects_stale_purchases_and_empty_slots(self):

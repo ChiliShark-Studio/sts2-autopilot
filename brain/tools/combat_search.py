@@ -40,6 +40,17 @@ STRENGTH_VALUE = 2.0
 DEXTERITY_VALUE = 1.5
 # 使用增益药水所需的最低模拟收益, 以敌方生命值为单位.
 POTION_MIN_GAIN = 15.0
+# 防御性增益 (如敏捷药水) 的收益体现为少掉血, 与火力单位不可比,
+# 因此单独用生命值衡量: 危险战斗中能少掉这么多血就值得喝.
+POTION_MIN_BLOCKED = 5
+# 能直接结算的药水效果; 其余 (抽牌、随机牌等) 无法本地模拟.
+KNOWN_EFFECTS = ("damage", "block", "heal", "strength", "dexterity",
+                 "vulnerable", "weak", "energy", "duplicate_next", "upgrade_hand")
+
+
+def potion_effects_known(eff: dict[str, int]) -> bool:
+    """药水效果是否可以被模拟器结算."""
+    return any(eff.get(name) for name in KNOWN_EFFECTS)
 # 桥接未提供升级数值时使用的固定增量.
 UPGRADE_DAMAGE_BONUS = 3
 UPGRADE_BLOCK_BONUS = 3
@@ -116,6 +127,10 @@ class _Sim:
     enemies: list[_Enemy]
     strength: int = 0
     dexterity: int = 0
+    # 覆甲层数: 回合结束时按层数获得格挡.
+    plated: int = 0
+    # 阵亡自动复活 (瓶中精灵) 时回复的最大生命值百分比; 0 表示没有这类药水.
+    revive_pct: int = 0
     frail: int = 0
     # 复制药水: 下一张牌打出两次.
     duplicate_next: int = 0
@@ -134,6 +149,8 @@ class _Sim:
             block=player.block,
             energy=player.energy,
             hand=list(battle.hand),
+            revive_pct=max((parse_potion(p.description)["death_save"]
+                            for p in player.potions), default=0),
             strength=_power(player.powers, _STRENGTH),
             dexterity=_power(player.powers, _DEXTERITY),
             frail=_power(player.powers, _FRAIL),
@@ -213,6 +230,15 @@ class _Sim:
         self.block += max(0, gain) * multiplier
         if card.no_block_turns:
             self.no_block_turns += card.no_block_turns
+        # 能力牌: 成长在打出之后才生效, 只影响后续打出的牌.
+        # 没有这一步, 燃烧之类的牌在模拟里等于空过一张能量.
+        self.strength += card.strength * multiplier
+        self.dexterity += card.dexterity * multiplier
+        # 覆甲: 回合结束时按层数获得格挡, 单回合模型按当回合可用格挡计.
+        self.plated += card.plated * multiplier
+        # 以生命为费用: 放血之外的掉血牌也要付这个代价.
+        if card.hp_cost:
+            self.hp = max(0, self.hp - card.hp_cost)
 
         for enemy in targets:
             enemy.vulnerable += card.vulnerable
@@ -265,14 +291,21 @@ class _Sim:
             self.hp = min(self.max_hp, self.hp + eff["heal"])
         if eff.get("strength"):
             self.strength += eff["strength"]
+        if eff.get("dexterity"):
+            # 敏捷只影响之后打出的牌, 重新规划时由 play() 逐张计入格挡.
+            self.dexterity += eff["dexterity"]
         if eff.get("upgrade_hand"):
             # 强化卡牌的药水直接改变手牌,
             # 重新规划时通过普通卡牌评分评估升级收益.
             self.hand = [_upgraded(c) for c in self.hand]
         if eff.get("duplicate_next"):
             self.duplicate_next = 1
+        if eff.get("energy"):
+            self.energy += eff["energy"]
         if eff.get("draw"):
-            self.energy += 0  # 抽牌尚未建模, 暂不给该效果增加收益.
+            # 桥接的抽牌堆按稀有度排序输出, 不是抽牌顺序,
+            # 因此"抽 N 张"的具体内容无法模拟; 这类药水交给模型判断.
+            pass
         for enemy in targets:
             if eff.get("vulnerable"):
                 enemy.vulnerable += eff["vulnerable"]
@@ -290,7 +323,8 @@ class _Sim:
             return 10000.0 + self.hp * 2
 
         incoming = sum(e.incoming for e in alive)
-        covered = min(self.block, incoming)
+        # 覆甲在回合结束时提供格挡, 与普通格挡一样用于抵挡本回合的伤害.
+        covered = min(self.block + self.plated, incoming)
         unblocked = incoming - covered
 
         ratio = self.hp / self.max_hp if self.max_hp else 1.0
@@ -321,12 +355,17 @@ class _Plan:
     @classmethod
     def from_sim(cls, sim: _Sim, sequence: list[tuple[int, Optional[int]]]) -> "_Plan":
         """记录出牌终点的评分和预计回合末结果, 不改变模拟状态."""
-        damage_taken = max(0, sim.total_incoming() - sim.block)
+        damage_taken = max(0, sim.total_incoming() - sim.block - sim.plated)
+        hp_left = sim.hp - damage_taken
+        if hp_left <= 0 and sim.revive_pct:
+            # 瓶中精灵会挡住这次死亡并把生命拉回一定比例,
+            # 因此"这回合会不会死"不能只看血量归零.
+            hp_left = max(1, sim.max_hp * sim.revive_pct // 100)
         return cls(
             sequence=sequence,
             score=sim.value(),
             damage_taken=damage_taken,
-            hp_left=sim.hp - damage_taken,
+            hp_left=hp_left,
             won=sim.hp > 0 and not any(e.alive for e in sim.enemies),
         )
 
@@ -354,9 +393,22 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7) -> _Plan:
 class CombatSearchTool:
     name = "combat_search"
 
-    def __init__(self, beam: int = 10, depth: int = 7) -> None:
+    def __init__(self, beam: int = 10, depth: int = 7, advisor=None) -> None:
         self.beam = beam
         self.depth = depth
+        # 效果无法模拟的药水 (抽牌 / 随机牌等) 只能由模型判断是否使用.
+        self.advisor = advisor
+        self._advised: dict[tuple, Optional[Decision]] = {}
+        # 药水顾问选择不使用时的说明, 会附加到本次决策的日志里.
+        self._potion_note = ""
+
+    def _finish(self, decision: Decision) -> Decision:
+        if not self._potion_note:
+            return decision
+        extra = dict(decision.extra or {})
+        extra["potion_advice"] = self._potion_note
+        self._potion_note = ""
+        return replace(decision, extra=extra)
 
     def decide(self, request: DecisionRequest) -> Decision:
         state = request.state
@@ -373,11 +425,17 @@ class CombatSearchTool:
         if potion is not None:
             return potion
 
+        advice = self._ask_advisor(state, plan)
+        if advice is not None:
+            return advice
+
         if not battle.hand:
-            return Decision(action=EndTurn(), reason="手牌为空", source=Source.SCRIPT, tool=self.name)
+            return self._finish(Decision(action=EndTurn(), reason="手牌为空",
+                                         source=Source.SCRIPT, tool=self.name))
 
         if not plan.sequence:
-            return Decision(action=EndTurn(), reason="没有更优出牌", source=Source.SEARCH, tool=self.name)
+            return self._finish(Decision(action=EndTurn(), reason="没有更优出牌",
+                                         source=Source.SEARCH, tool=self.name))
 
         pos, target_index = plan.sequence[0]
         card = sim.hand[pos]
@@ -391,7 +449,36 @@ class CombatSearchTool:
         )
         if plan.won:
             reason = f"斩杀方案: {reason}"
-        return Decision(action=PlayCard(card, target), reason=reason, source=Source.SEARCH, tool=self.name)
+        return self._finish(Decision(action=PlayCard(card, target), reason=reason,
+                                     source=Source.SEARCH, tool=self.name))
+
+    def _ask_advisor(self, state, plan: _Plan) -> Optional[Decision]:
+        """方案会死且身上有无法模拟的药水时, 让模型决定是否使用.
+
+        抽牌药水、随机无色牌这类效果取决于牌堆与随机结果, 本地无法给出可信数值;
+        与其编一个收益, 不如只在"不喝就死"的局面下把选择权交给模型.
+        """
+        if self.advisor is None or plan.hp_left > 0:
+            return None
+        unknown = [p for p in state.player.potions
+                   if p.usable and not potion_effects_known(parse_potion(p.description))]
+        if not unknown:
+            return None
+
+        # 同一帧可能被重复读取, 避免对相同局面反复调用模型.
+        key = (
+            state.battle.round, state.player.hp, state.player.energy,
+            tuple(c.name for c in state.battle.hand),
+            tuple(p.id for p in unknown),
+        )
+        if key in self._advised:
+            return self._advised[key]
+        advice = self.advisor.advise(state, unknown)
+        if advice is None:
+            # 模型选择不用时也要留痕, 否则事后看不出"为什么不喝药".
+            self._potion_note = getattr(self.advisor, "last_decline", "") or "模型未给出建议"
+        self._advised[key] = advice
+        return advice
 
     def _potion(self, state, sim: _Sim, base: _Plan) -> Optional[Decision]:
         """在模拟器中逐个尝试药水, 仅在收益足够时使用.
@@ -417,6 +504,10 @@ class CombatSearchTool:
             eff = parse_potion(potion.description)
             offensive = (eff["damage"] or eff["strength"] or eff["vulnerable"]
                          or eff["weak"] or eff["upgrade_hand"] or eff["duplicate_next"])
+            # 敏捷与格挡都是防御性效果: 不能健康时随便喝, 但危险战斗中能少掉血就值得.
+            defensive = bool(eff["dexterity"] or eff["block"])
+            # 能量与抽牌的收益由重新规划衡量.
+            enabling = bool(eff["energy"] or eff["draw"])
             # 单体药水尝试所有存活敌人, 其他药水只需评估一次.
             targets: list[Optional[int]] = (
                 [i for i, enemy in enumerate(sim.enemies) if enemy.alive]
@@ -427,6 +518,8 @@ class CombatSearchTool:
                 trial.apply_potion(eff, target_index)
                 plan = _plan(trial, self.beam, self.depth)
                 delta = plan.score - base.score
+                # 防御性增益的价值在格挡上, 用本回合少掉的血衡量.
+                blocked = base.damage_taken - plan.damage_taken
 
                 if plan.hp_left <= 0:
                     continue
@@ -436,6 +529,10 @@ class CombatSearchTool:
                     why = "斩杀"
                 elif offensive and hp_ratio < 0.6 and delta >= POTION_MIN_GAIN:
                     why = "增伤"
+                elif defensive and hp_ratio < 0.6 and blocked >= POTION_MIN_BLOCKED:
+                    why = "减伤"
+                elif enabling and hp_ratio < 0.6 and delta >= POTION_MIN_GAIN:
+                    why = "增益"
                 else:
                     continue
 

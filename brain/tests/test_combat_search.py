@@ -88,5 +88,64 @@ class LethalPlanningTests(unittest.TestCase):
         self.assertNotIn("斩杀", decide_state(raw).reason)
 
 
+class PowerCardTests(unittest.TestCase):
+    """能力牌的价值全在描述里, 不解析就等于模拟中空过一张能量."""
+
+    def test_parse_reads_strength_from_description(self):
+        from brain.effects import parse_card
+
+        parsed = parse_card({"name": "燃烧", "type": "Power", "cost": "1",
+                             "description": "获得2点力量。"})
+        self.assertEqual(parsed["strength"], 2)
+        self.assertEqual(parsed["damage"], 0)
+
+    def test_played_power_boosts_later_attacks(self):
+        # 先打燃烧获得 2 点力量, 之后每张打击造成 6+2 点伤害.
+        raw = state(energy=2, enemy_hp=30, hand=[
+            {"index": 0, "name": "燃烧", "type": "Power", "cost": "1",
+             "description": "获得2点力量。"},
+            {"index": 1, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+             "target_type": "AnyEnemy"},
+        ])
+        decision = decide_state(raw)
+        self.assertEqual(decision.action.kind, "play_card")
+        self.assertEqual(decision.action.card.name, "燃烧")
+
+    def test_strength_from_power_reaches_lethal(self):
+        # 燃烧 + 打击 = 8 点伤害, 对方剩 8 点生命.
+        raw = state(energy=2, enemy_hp=8, hand=[
+            {"index": 0, "name": "燃烧", "type": "Power", "cost": "1",
+             "description": "获得2点力量。"},
+            {"index": 1, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+             "target_type": "AnyEnemy"},
+        ])
+        self.assertIn("斩杀", decide_state(raw).reason)
+
+
+class PlatedArmorTests(unittest.TestCase):
+    """覆甲 (岩石铠甲): 回合结束时按层数获得格挡, 之前完全没建模."""
+
+    def test_parse_reads_plated(self):
+        from brain.effects import parse_card
+
+        parsed = parse_card({"name": "岩石铠甲", "type": "Power", "cost": "1",
+                             "description": "获得4层覆甲。"})
+        self.assertEqual(parsed["plated"], 4)
+
+    def test_plated_counts_as_block(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        raw = state(energy=1, enemy_hp=40, incoming=10, hand=[
+            {"index": 0, "name": "岩石铠甲", "type": "Power", "cost": "1",
+             "description": "获得4层覆甲。"}])
+        parsed = GameState.parse(raw)
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.play(0, None)
+        self.assertEqual(sim.plated, 4)
+        # 10 点来袭伤害中 4 点被覆甲挡住.
+        self.assertEqual(sim.total_incoming() - sim.block - sim.plated, 6)
+
+
 if __name__ == "__main__":
     unittest.main()

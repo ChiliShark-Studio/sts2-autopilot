@@ -31,7 +31,7 @@ from ..actions import (
 )
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..model import Card
-from .strategy import StrategyContext, choose
+from .strategy import LLM_ATTEMPTS, StrategyContext, choose, no_decision
 
 RARITY_BONUS = {"Basic": 0.0, "Common": 0.3, "Uncommon": 0.9, "Rare": 1.8}
 SKIP_THRESHOLD = 2.0
@@ -42,10 +42,17 @@ TYPE_BONUS = {"power": 1.5}
 
 
 def card_score(card: Card) -> float:
-    """按每点能量的收益评分, 加少量稀有度奖励, 刻意保持简单."""
+    """按每点能量的收益评分, 加少量稀有度奖励, 刻意保持简单.
+
+    能力牌的成长 (力量 / 敏捷 / 覆甲) 没有直接的伤害或格挡数值,
+    只看数值会把它们评成 0 分, 进而被弃牌和"变化"轻易丢掉.
+    以生命为费用的牌则要扣除代价, 避免把掉血当成免费.
+    """
     cost = max(1, card.cost)
     value = BASE_VALUE + card.damage * card.hits + card.block * 0.9
     value += card.vulnerable * 3 + card.weak * 2 + card.draw * 2 + card.energy * 3
+    value += card.strength * 4 + card.dexterity * 3 + card.plated * 2
+    value -= card.hp_cost * 1.5
     value += TYPE_BONUS.get(card.type.lower(), 0.0)
     return value / cost + RARITY_BONUS.get(card.rarity, 0.0)
 
@@ -73,6 +80,8 @@ def _card_dict_value(card: dict) -> float:
     cost = max(1, parsed["cost"])
     value = parsed["damage"] * parsed["hits"] + parsed["block"] * 0.9
     value += parsed["vulnerable"] * 3 + parsed["weak"] * 2 + parsed["draw"] * 2
+    value += (parsed.get("strength", 0) * 4 + parsed.get("dexterity", 0) * 3
+              + parsed.get("plated", 0) * 2 - parsed.get("hp_cost", 0) * 1.5)
     return value / cost + RARITY_BONUS.get(card.get("rarity") or "", 0.0)
 
 
@@ -88,6 +97,8 @@ def _shop_card_value(item: dict) -> float:
     cost = max(1, parsed["cost"])
     value = parsed["damage"] * parsed["hits"] + parsed["block"] * 0.9
     value += parsed["vulnerable"] * 3 + parsed["weak"] * 2 + parsed["draw"] * 2
+    value += (parsed.get("strength", 0) * 4 + parsed.get("dexterity", 0) * 3
+              + parsed.get("plated", 0) * 2 - parsed.get("hp_cost", 0) * 1.5)
     return value / cost + RARITY_BONUS.get(item.get("card_rarity") or "", 0.0)
 
 
@@ -183,8 +194,15 @@ class BuildFlowTool:
         return Decision(action=None, reason=f"未实现的界面: {request.scene}", source=Source.NONE, tool=self.name)
 
     def _choose(self, request: DecisionRequest, task: str, candidates: list) -> Optional[Decision]:
-        return choose(self.client, request.state, self.context,
-                      task=task, candidates=candidates, tool=self.name)
+        # 离线运行没有模型, 走启发式; 有模型时失败只重试, 不退回启发式.
+        if self.client is None:
+            return None
+        decision = choose(self.client, request.state, self.context,
+                          task=task, candidates=candidates, tool=self.name,
+                          attempts=LLM_ATTEMPTS)
+        if decision is None:
+            return no_decision(self.name, f"模型连续 {LLM_ATTEMPTS} 次未给出有效选择")
+        return decision
 
     def _card_reward(self, request: DecisionRequest) -> Decision:
         cards = request.state.card_reward
@@ -264,14 +282,21 @@ class BuildFlowTool:
         if not options:
             return WAIT
 
-        decision = self._choose(request, "选择篝火行动：权衡恢复与构筑升级的收益。",
-                                [(int(o.get("index", 0)), RestOption(int(o.get("index", 0))), o)
-                                 for o in options])
+        decision = self._choose(
+            request,
+            "选择篝火行动。默认选择锻造（升级）: 升级是整局永久收益, 回血只解决眼前。"
+            "只有下列情况才休息: 血量低于三成; 下一节点就是 Boss 且血量不足以撑过; "
+            "牌组已经没有值得升级的牌。回血次数不要超过本幕篝火总数的一半, "
+            "升级优先升级后质变的牌（增加段数、降低费用、显著提升易伤层数或格挡数值）, "
+            "不要升级基础打击或防御。",
+            [(int(o.get("index", 0)), RestOption(int(o.get("index", 0))), o)
+             for o in options])
         if decision is not None:
             return decision
 
         # 提示名称会随语言变化, id 保持稳定.
-        want = "HEAL" if request.state.player.hp_ratio < 0.6 else "SMITH"
+        # 离线时同样遵循攻略口径: 回血只在血量很低时才算划算.
+        want = "HEAL" if request.state.player.hp_ratio < 0.35 else "SMITH"
         pick = next((o for o in options if str(o.get("id")).upper() == want), options[0])
         reason = f"{pick.get('name', '')}: {pick.get('description', '')}"[:60]
         return Decision(action=RestOption(int(pick.get("index", 0))), reason=reason,

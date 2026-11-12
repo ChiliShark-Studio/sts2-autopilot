@@ -101,5 +101,27 @@ class SelectToolTests(unittest.TestCase):
         self.assertIsNone(decision.action)
 
 
+class PutOnDrawPileTests(unittest.TestCase):
+    """头槌: 选择一张牌放到抽牌堆顶, 应该挑最想要的牌而不是最差的."""
+
+    def test_picks_best_card_for_draw_pile_top(self):
+        raw = {
+            "state_type": "hand_select",
+            "hand_select": {
+                "prompt": "选择一张牌放到你的抽牌堆顶。",
+                "cards": [
+                    {"index": 0, "name": "打击", "cost": "1", "damage": 6, "hits": 1},
+                    {"index": 1, "name": "痛击", "cost": "2", "damage": 8, "hits": 1,
+                     "vulnerable": 2},
+                ],
+            },
+            "player": {"hp": 40, "max_hp": 80},
+        }
+        decision = SelectTool().decide(
+            DecisionRequest(kind=DecisionKind.SELECT, state=GameState.parse(raw)))
+        self.assertEqual(decision.action.index, 1)
+        self.assertIn("最高", decision.reason)
+
+
 if __name__ == "__main__":
     unittest.main()

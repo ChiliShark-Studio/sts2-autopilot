@@ -13,10 +13,12 @@ from ..actions import CancelSelection, ConfirmSelection, SelectCard
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..model import Card
 from .build_flow import card_score, discard_score
-from .strategy import StrategyContext, choose, combat_selection
+from .strategy import LLM_ATTEMPTS, StrategyContext, choose, combat_selection, no_decision
 
 UPGRADE_HINTS = ("升级", "强化", "变为")
-KEEP_HINTS = ("保留", "复制")
+# 这些提示都是"把牌放到某个位置"而不是丢弃:
+# 头槌会把选中的牌放到抽牌堆顶, 此时应该挑最想要的牌, 而不是最差的.
+KEEP_HINTS = ("保留", "复制", "抽牌堆顶", "放到", "置于")
 
 
 class SelectTool:
@@ -71,13 +73,15 @@ class SelectTool:
             raw_picker = state.raw.get("card_select") or state.raw.get("hand_select") or {}
             if raw_picker.get("can_skip"):
                 candidates.append((-1, CancelSelection(), {"说明": "跳过本次选牌"}))
-            decision = choose(
-                self.client, state, self.context,
-                task=f"构筑选牌：类型={picker.mode}，提示={picker.prompt}。永久删牌、升级、变化或复制需要服务于当前构筑。",
-                candidates=candidates, tool=self.name,
-            )
-            if decision is not None:
-                return decision
+            if self.client is not None:
+                decision = choose(
+                    self.client, state, self.context,
+                    task=f"构筑选牌：类型={picker.mode}，提示={picker.prompt}。永久删牌、升级、变化或复制需要服务于当前构筑。",
+                    candidates=candidates, tool=self.name, attempts=LLM_ATTEMPTS,
+                )
+                # 有模型时不退回启发式: 模型连续失败就停下等待排查.
+                return decision if decision is not None else no_decision(
+                    self.name, f"模型连续 {LLM_ATTEMPTS} 次未给出有效选择")
 
         prompt = picker.prompt
         if any(hint in prompt for hint in UPGRADE_HINTS) or any(hint in prompt for hint in KEEP_HINTS):

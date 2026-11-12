@@ -9,7 +9,7 @@ from brain.tools.combat_search import _Sim, _plan, decide_state
 
 
 def state(*, hp=70, max_hp=70, block=0, energy=3, enemy_hp=40, incoming=10,
-          hand=None, potions=None, enemies=1) -> dict:
+          hand=None, potions=None, enemies=1, draw=None) -> dict:
     return {
         "state_type": "monster",
         "battle": {
@@ -27,6 +27,7 @@ def state(*, hp=70, max_hp=70, block=0, energy=3, enemy_hp=40, incoming=10,
             "hand": hand if hand is not None else [
                 {"index": 0, "name": "打击", "cost": "1", "damage": 6, "hits": 1}],
             "potions": potions or [],
+            "draw_pile": draw or [],
         },
     }
 
@@ -204,7 +205,8 @@ class PotionTests(unittest.TestCase):
 
 class PotionPlanningTests(unittest.TestCase):
     def test_saves_block_potion_when_cards_already_survive(self):
-        hand = [{"index": 0, "name": "防御", "cost": "1", "block": 6,
+        # 手牌已经挡住全部伤害时, 药水不带来任何减伤, 应留到后面的战斗.
+        hand = [{"index": 0, "name": "防御", "cost": "1", "block": 20,
                  "target_type": "Self"}]
         decision = decide_state(state(hp=10, incoming=15, energy=1, hand=hand,
                                       potions=[block_potion()]))
@@ -271,6 +273,218 @@ class PotionPlanningTests(unittest.TestCase):
                     # 每次决策各有一次基础搜索和一次药水搜索, 状态也重新构建.
                     self.assertEqual(search.call_count, attempt * 2)
                     self.assertEqual(build.call_count, attempt)
+
+
+def dexterity_potion(slot=0):    return {"slot": slot, "id": "DEXTERITY_POTION", "name": "敏捷药水",
+            "description": "获得2点敏捷。", "target_type": "AnyPlayer",
+            "can_use_in_combat": True}
+
+
+def defend(name="防御", block=5):
+    return {"index": 0, "name": name, "cost": "1", "block": block,
+            "target_type": "AnyPlayer", "description": f"获得{block}点格挡。"}
+
+
+def energy_potion(slot=0):
+    return {"slot": slot, "id": "ENERGY_POTION", "name": "能量药水",
+            "description": "获得2点能量。", "target_type": "AnyPlayer",
+            "can_use_in_combat": True}
+
+
+class EnergyPotionTests(unittest.TestCase):
+    """能量药水的价值是多打一张牌, 必须计入模拟, 否则等于不存在."""
+
+    def test_parse_reads_energy(self):
+        from brain.effects import parse_potion
+
+        self.assertEqual(parse_potion("获得2点能量。")["energy"], 2)
+
+    def test_parse_reads_energy_icons(self):
+        from brain.effects import parse_potion
+
+        # 实际游戏把数量渲染成图标: 两个图标 = 2 点能量.
+        desc = "获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。"
+        self.assertEqual(parse_potion(desc)["energy"], 2)
+
+    def test_parse_reads_binding_potion(self):
+        from brain.effects import parse_potion
+
+        eff = parse_potion("给予所有敌人1层虚弱和1层易伤。")
+        self.assertEqual((eff["weak"], eff["vulnerable"]), (1, 1))
+
+    def test_energy_potion_enables_lethal(self):
+        # 1 点能量只能打一张打击(6 伤); 加 2 点能量后三张全打, 18 点可以斩杀.
+        decision = decide_state(state(hp=30, enemy_hp=17, energy=1,
+                                      hand=three_strikes(), potions=[energy_potion()]))
+        self.assertEqual(decision.action.kind, "use_potion")
+        self.assertIn("能量药水", decision.reason)
+
+
+class DexterityTests(unittest.TestCase):
+    """敏捷提高每张牌的格挡, 必须被模拟, 否则药水等同不存在."""
+
+    def test_parse_reads_dexterity(self):
+        from brain.effects import parse_potion
+
+        eff = parse_potion("获得2点敏捷。")
+        self.assertEqual(eff["dexterity"], 2)
+        self.assertEqual(eff["strength"], 0)
+
+    def test_applied_dexterity_adds_block_to_each_card(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        parsed = GameState.parse(state(hand=[defend(), defend()]))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.apply_potion({"dexterity": 2})
+        sim.play(0, None)
+        sim.play(0, None)
+        self.assertEqual(sim.block, 14)  # (5+2) * 2
+
+    def test_survives_lethal_only_with_dexterity_potion(self):
+        # 两张防御共 10 点格挡, 8 血吃 20 点伤害会死亡; 加 2 点敏捷后共 14 点, 剩 2 血.
+        hand = [dict(defend(), index=0), dict(defend(), index=1),
+                {"index": 2, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+                 "target_type": "AnyEnemy"}]
+        raw = state(hp=8, incoming=20, enemy_hp=40, energy=2, hand=hand,
+                    potions=[dexterity_potion()])
+        decision = decide_state(raw)
+        self.assertEqual(decision.action.kind, "use_potion")
+        self.assertIn("敏捷药水", decision.reason)
+        self.assertIn("保命", decision.reason)
+
+    def test_used_when_it_prevents_enough_damage(self):
+        # 三张防御共 15 点格挡, 20 点攻击仍掉 5 血; 加 2 点敏捷后完全挡住.
+        # 35/80 血属于危险区间, 少掉 5 点血足以消耗一瓶防御药水.
+        hand = [dict(defend(), index=i) for i in range(3)]
+        raw = state(hp=35, max_hp=80, incoming=20, enemy_hp=40, energy=3,
+                    hand=hand, potions=[dexterity_potion()])
+        decision = decide_state(raw)
+        self.assertEqual(decision.action.kind, "use_potion")
+        self.assertIn("减伤", decision.reason)
+
+    def test_dexterity_potion_saved_when_already_safe(self):
+        hand = [dict(defend(), index=0), dict(defend(), index=1)]
+        raw = state(hp=70, incoming=20, enemy_hp=40, energy=2, hand=hand,
+                    potions=[dexterity_potion()])
+        self.assertNotEqual(decide_state(raw).action.kind, "use_potion")
+
+
+def swift_potion(slot=0):
+    return {"slot": slot, "id": "SWIFT_POTION", "name": "迅捷药水",
+            "description": "抽3张牌。", "target_type": "AnyPlayer",
+            "can_use_in_combat": True}
+
+
+def colorless_potion(slot=0):
+    return {"slot": slot, "id": "COLORLESS_POTION", "name": "无色药水",
+            "description": "从3张随机无色牌中选择1张加入你的手牌。这张牌在本回合可以免费打出。",
+            "target_type": "AnyPlayer", "can_use_in_combat": True}
+
+
+class DrawPotionTests(unittest.TestCase):
+    """抽牌类药水无法本地模拟: 桥接按稀有度排序输出牌堆, 顺序不是抽牌顺序."""
+
+    def test_draw_potion_is_not_modelled_locally(self):
+        from brain.effects import parse_potion
+        from brain.tools.combat_search import potion_effects_known
+
+        eff = parse_potion("抽3张牌。")
+        self.assertEqual(eff["draw"], 3)
+        # 抽到哪几张无法确定, 因此不计入本地收益, 交给模型判断.
+        self.assertFalse(potion_effects_known(eff))
+
+    def test_draw_potion_is_not_faked_as_value(self):
+        decision = decide_state(state(hp=40, enemy_hp=17, energy=3, hand=[],
+                                      potions=[swift_potion()]))
+        self.assertNotEqual(decision.action.kind, "use_potion")
+
+    def test_colorless_potion_is_flagged_unknown(self):
+        from brain.effects import parse_potion
+
+        eff = parse_potion(colorless_potion()["description"])
+        self.assertEqual(eff["random_card"], 1)
+        # 效果未知时不编造数值: 没有可模拟的收益, 搜索不会替它做决定.
+        self.assertEqual(eff["damage"] + eff["block"] + eff["draw"] + eff["energy"], 0)
+
+    def test_colorless_potion_is_not_faked_as_damage(self):
+        decision = decide_state(state(hp=40, enemy_hp=5, energy=0, hand=[],
+                                      potions=[colorless_potion()]))
+        self.assertFalse(decision.action is not None and decision.action.kind == "use_potion")
+
+
+class BloodlettingTests(unittest.TestCase):
+    """放血: 0 费, 失去 3 点生命换 2 点能量; 两项都必须被解析."""
+
+    def test_parse_reads_energy_icons_and_hp_cost(self):
+        from brain.effects import parse_card
+
+        parsed = parse_card({
+            "name": "放血", "cost": "0", "type": "Skill",
+            "description": "失去3点生命。 获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。",
+        })
+        self.assertEqual(parsed["cost"], 0)
+        self.assertEqual(parsed["energy"], 2)
+        self.assertEqual(parsed["hp_cost"], 3)
+
+    def test_playing_it_trades_hp_for_energy(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim
+
+        raw = state(hp=40, energy=0, hand=[{
+            "index": 0, "name": "放血", "cost": "0",
+            "description": "失去3点生命。 获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。",
+        }])
+        parsed = GameState.parse(raw)
+        sim = _Sim.build(parsed.player, parsed.battle)
+        sim.play(0, None)
+        self.assertEqual(sim.energy, 2)
+        self.assertEqual(sim.hp, 37)
+
+    def test_energy_from_bloodletting_enables_attack(self):
+        # 0 能量时放血是唯一能打出的牌, 换来 2 费继续输出.
+        hand = [{"index": 0, "name": "放血", "cost": "0",
+                 "description": "失去3点生命。 获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。"},
+                {"index": 1, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+                 "target_type": "AnyEnemy"}]
+        decision = decide_state(state(hp=40, energy=0, enemy_hp=6, hand=hand))
+        self.assertEqual(decision.action.kind, "play_card")
+        self.assertEqual(decision.action.card.name, "放血")
+
+
+class FairyPotionTests(unittest.TestCase):
+    """瓶中精灵是阵亡复活, 被动生效, 必须计入"这回合会不会死"."""
+
+    FAIRY = {"slot": 2, "id": "FAIRY_IN_A_BOTTLE", "name": "瓶中精灵",
+             "description": "当你的生命值将被减少至0或以下时，改为丢弃这瓶药水，"
+                            "然后将你回复到你最大生命值的30%。",
+             "target_type": "Self", "can_use_in_combat": False}
+
+    def test_parse_reads_death_save(self):
+        from brain.effects import parse_potion
+
+        self.assertEqual(parse_potion(self.FAIRY["description"])["death_save"], 30)
+
+    def test_lethal_turn_is_not_treated_as_death(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim, _plan
+
+        # 10 血吃 30 点伤害: 有瓶中精灵时不会真的死, 方案终点应带回血量.
+        raw = state(hp=10, incoming=30, max_hp=80, energy=0, hand=[],
+                    potions=[self.FAIRY])
+        st = GameState.parse(raw)
+        sim = _Sim.build(st.player, st.battle)
+        self.assertEqual(sim.revive_pct, 30)
+        self.assertGreater(_plan(sim, 10, 7).hp_left, 0)
+
+    def test_without_fairy_the_same_turn_is_fatal(self):
+        from brain.model import GameState
+        from brain.tools.combat_search import _Sim, _plan
+
+        raw = state(hp=10, incoming=30, max_hp=80, energy=0, hand=[], potions=[])
+        st = GameState.parse(raw)
+        sim = _Sim.build(st.player, st.battle)
+        self.assertLessEqual(_plan(sim, 10, 7).hp_left, 0)
 
 
 if __name__ == "__main__":

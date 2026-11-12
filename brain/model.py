@@ -84,6 +84,13 @@ class Card:
     weak: int = 0
     draw: int = 0
     energy: int = 0
+    # 能力牌提供的永久成长 (如燃烧的 +2 力量), 只在打出时生效.
+    strength: int = 0
+    dexterity: int = 0
+    # 覆甲: 回合结束时按层数获得格挡.
+    plated: int = 0
+    # 以生命为费用 (放血: 失去 3 点生命).
+    hp_cost: int = 0
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -114,6 +121,10 @@ class Card:
             weak=parsed["weak"],
             draw=parsed["draw"],
             energy=parsed["energy"],
+            strength=parsed.get("strength", 0),
+            dexterity=parsed.get("dexterity", 0),
+            plated=parsed.get("plated", 0),
+            hp_cost=parsed.get("hp_cost", 0),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),
@@ -142,12 +153,20 @@ class Intent:
     def parse(cls, raw: Any) -> "Intent":
         d = _d(raw)
         # 带补丁的 Mod 输出数值, 旧版只有文本.
+        # 数值字段是基础伤害, 标签/描述才是结算后的值 (见 effects.resolved_attack),
+        # 因此攻击意图统一走解析, 避免低估来袭伤害.
+        from .effects import resolved_attack
+
+        kind = _s(d.get("type"))
+        if "attack" in kind.lower():
+            damage, hits = resolved_attack(d)
+            return cls(kind, damage, hits, _s(d.get("label")))
         if d.get("damage") is not None:
-            return cls(_s(d.get("type")), _i(d.get("damage")), max(1, _i(d.get("hits"), 1)), _s(d.get("label")))
+            return cls(kind, _i(d.get("damage")), max(1, _i(d.get("hits"), 1)), _s(d.get("label")))
         from .effects import parse_intent
 
         damage, hits = parse_intent(d)
-        return cls(_s(d.get("type")), damage, hits, _s(d.get("label")))
+        return cls(kind, damage, hits, _s(d.get("label")))
 
     @property
     def is_attack(self) -> bool:

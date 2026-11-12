@@ -189,7 +189,10 @@ class GameAgent:
             try:
                 state = self.port.state()
                 last_screen = state.screen.value
+                started = time.perf_counter()
                 decision = self.decide(state)
+                # 真实模型调用耗时是 T07b 的验收项之一, 因此每步都要记录.
+                elapsed = int((time.perf_counter() - started) * 1000)
                 if decision.action is not None:
                     try:
                         self.port.act(decision.action, state)
@@ -206,7 +209,7 @@ class GameAgent:
                     if isinstance(decision.action, (ChooseMapNode, MenuSelect)):
                         self._await_change(state)
                 if self.journal is not None:
-                    self.journal.record(state, decision)
+                    self.journal.record(state, decision, elapsed_ms=elapsed)
             except StopRun:
                 return "game_over"
             except UnsupportedScreen as exc:

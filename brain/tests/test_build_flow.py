@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from brain.actions import ClaimReward, Proceed, SelectCardReward, SkipCardReward
@@ -157,13 +158,70 @@ class LLMCardPickTests(unittest.TestCase):
         decision = tool.decide(request(REWARD_STATE, "card_reward"))
         self.assertIsInstance(decision.action, SkipCardReward)
 
-    def test_invalid_choice_falls_back_to_heuristic(self):
+    def test_invalid_choice_stops_instead_of_guessing(self):
         from brain.llm import make_mock_client
 
+        # 有模型时不退回启发式: 连续 3 次无效就停下, 不再猜一个动作.
         tool = BuildFlowTool(make_mock_client({"choice": 99, "reason": "瞎选"}))
         decision = tool.decide(request(REWARD_STATE, "card_reward"))
-        self.assertEqual(decision.source.value, "heuristic")
-        self.assertIsInstance(decision.action, SelectCardReward)
+        self.assertIsNone(decision.action)
+        self.assertEqual(decision.source.value, "none")
+        self.assertIn("未给出有效选择", decision.reason)
+
+
+class CardScoreTests(unittest.TestCase):
+    """能力牌的成长没有直接数值, 不能被评成 0 分而被丢掉."""
+
+    def _card(self, **kwargs):
+        from brain.model import Card
+
+        return Card.parse(kwargs)
+
+    def test_plated_power_scores_above_basic_strike(self):
+        rock = self._card(name="岩石铠甲", type="Power", cost="1",
+                          description="获得4层覆甲。")
+        strike = self._card(name="打击", type="Attack", cost="1", damage=6, hits=1)
+        self.assertGreater(card_score(rock), card_score(strike))
+
+    def test_strength_power_scores_well(self):
+        inflame = self._card(name="燃烧", type="Power", cost="1",
+                             description="获得2点力量。")
+        strike = self._card(name="打击", type="Attack", cost="1", damage=6, hits=1)
+        self.assertGreater(card_score(inflame), card_score(strike))
+
+    def test_hp_cost_is_penalised(self):
+        with_cost = self._card(name="放血", type="Skill", cost="0",
+                               description="失去3点生命。 获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。")
+        without = self._card(name="放血(无代价)", type="Skill", cost="0",
+                             description="获得[ironclad_energy_icon.png][ironclad_energy_icon.png]。")
+        self.assertLess(card_score(with_cost), card_score(without))
+
+
+class CampfirePromptTests(unittest.TestCase):
+    """篝火默认锻造: 回血次数不应超过篝火总数一半."""
+
+    REST = {"state_type": "rest_site", "run": {"act": 1, "floor": 8},
+            "player": {"hp": 40, "max_hp": 80},
+            "rest_site": {"options": [{"index": 0, "id": "HEAL", "is_enabled": True},
+                                      {"index": 1, "id": "SMITH", "is_enabled": True}]}}
+
+    def test_rest_prompt_prefers_smith(self):
+        from unittest.mock import Mock
+
+        from brain.llm import make_mock_client
+
+        client = make_mock_client({})
+        client.json_chat = Mock(return_value={"choice": 1, "reason": "升级"})
+        tool = BuildFlowTool(client)
+        decision = tool.decide(request(self.REST, "rest_site"))
+        self.assertEqual(decision.action.kind, "choose_rest_option")
+        task = json.loads(client.json_chat.call_args.args[1])["task"]
+        self.assertIn("默认选择锻造", task)
+        self.assertIn("回血次数不要超过", task)
+
+    def test_offline_heals_only_when_low(self):
+        # 40/80 = 50%: 不是危险血量, 离线策略应选择锻造.
+        self.assertEqual(BuildFlowTool().decide(request(self.REST, "rest_site")).action.index, 1)
 
 
 if __name__ == "__main__":

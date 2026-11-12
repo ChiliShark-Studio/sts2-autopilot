@@ -23,8 +23,22 @@ _DRAW = re.compile(r"抽\s*(\d+)\s*张牌")
 _ENERGY = re.compile(r"获得\s*(\d+)\s*点能量")
 _HEAL = re.compile(r"回复\s*(\d+)\s*点(?:生命|最大生命值)")
 _STRENGTH_GAIN = re.compile(r"获得\s*(\d+)\s*点力量")
+# 敏捷药水: "获得2点敏捷。" 敏捷提升本回合每张牌的格挡.
+_DEXTERITY_GAIN = re.compile(r"获得\s*(\d+)\s*点敏捷")
 # 应急按钮: "你在接下来的2回合内无法再从卡牌中获得格挡."
 _NO_BLOCK_TURNS = re.compile(r"接下来的\s*(\d+)\s*回合内无法再从卡牌中获得格挡")
+# 失去生命作为费用: 放血 "失去3点生命。"
+_HP_COST = re.compile(r"失去\s*(\d+)\s*点生命")
+# 覆甲: "获得4层覆甲。" 回合结束时按层数获得格挡.
+_PLATED = re.compile(r"获得\s*(\d+)\s*层覆甲")
+# 药水描述会把"给予所有敌人 N 层"写成整句, 数字前允许有其他词.
+_BIND_VULN = re.compile(r"(\d+)\s*层易伤")
+_BIND_WEAK = re.compile(r"(\d+)\s*层虚弱")
+# 能量药水的数量被渲染成图标: "获得[ironclad_energy_icon.png]...".
+_ENERGY_ICON = "energy_icon"
+# 瓶中精灵: "当你的生命值将被减少至0或以下时，改为丢弃这瓶药水，
+# 然后将你回复到你最大生命值的30%。"
+_DEATH_SAVE = re.compile(r"最大生命值的\s*(\d+)\s*%")
 
 
 def parse_potion(description: str) -> dict[str, int]:
@@ -32,6 +46,8 @@ def parse_potion(description: str) -> dict[str, int]:
 
     药水只提供描述字符串, 因此与卡牌文本解析一样属于临时方案.
     支持影响生存和斩杀的伤害 / 格挡 / 治疗药水, 复杂效果按 0 处理.
+    敏捷与力量同样影响数值结算, 因此单独解析:
+    力量提高攻击伤害, 敏捷提高从卡牌获得的格挡.
     """
     desc = description or ""
 
@@ -40,14 +56,24 @@ def parse_potion(description: str) -> dict[str, int]:
         "block": _first(_BLOCK, desc),
         "heal": _first(_HEAL, desc),
         "strength": _first(_STRENGTH_GAIN, desc),
-        "vulnerable": _first(_VULN, desc),
-        "weak": _first(_WEAK, desc),
+        "dexterity": _first(_DEXTERITY_GAIN, desc),
+        "vulnerable": _first(_VULN, desc) or _first(_BIND_VULN, desc),
+        "weak": _first(_WEAK, desc) or _first(_BIND_WEAK, desc),
         "draw": _first(_DRAW, desc),
+        # 能量药水: 数值可能是 "获得2点能量", 也可能被渲染成能量图标.
+        "energy": _first(_ENERGY, desc) or desc.count(_ENERGY_ICON),
         # 强化卡牌的药水 (如熔炉的祝福) 会改变手牌本身;
         # 其价值通过卡牌评分计算, 而非单独的效果数值.
         "upgrade_hand": 1 if ("升级" in desc and "手牌" in desc) else 0,
         # 复制效果: "本回合, 你打出的下一张牌会额外打出一次."
         "duplicate_next": 1 if ("额外打出一次" in desc or "打出两次" in desc) else 0,
+        # 随机无色牌: "从3张随机无色牌中选择1张加入你的手牌."
+        # 具体牌未知, 模拟器用一张平均牌代替 (见 combat_search.COLORLESS_CARD_*).
+        "random_card": 1 if ("无色牌" in desc and "手牌" in desc) else 0,
+        # 阵亡自动复活 (瓶中精灵): 生命降到 0 时改为回复最大生命值的 N%.
+        # 这是被动效果, 不能主动使用, 但必须计入"这回合会不会死".
+        "death_save": (_first(_DEATH_SAVE, desc)
+                       if ("减少至0" in desc or "丢弃这瓶药水" in desc) else 0),
     }
 
 
@@ -56,6 +82,27 @@ def _int(value: Any, default: int = 0) -> int:
         return int(str(value).strip())
     except (TypeError, ValueError):
         return default
+
+
+# 桥接把数值渲染成图标占位符, 模型读不到实际数字, 需要换成文字.
+_ICONS = {
+    "[ironclad_energy_icon.png]": "1点能量",
+    "[silent_energy_icon.png]": "1点能量",
+    "[regent_energy_icon.png]": "1点能量",
+    "[star_icon.png]": "1点星",
+}
+
+
+def humanize(text: str) -> str:
+    """把图标占位符换成可读文字, 供模型判断牌面效果.
+
+    示例: "获得[ironclad_energy_icon.png][ironclad_energy_icon.png]"
+    读作 "获得1点能量1点能量", 模型才能看出这是 2 费产能.
+    """
+    out = text or ""
+    for icon, label in _ICONS.items():
+        out = out.replace(icon, label)
+    return out
 
 
 def _first(pattern: re.Pattern[str], text: str) -> int:
@@ -81,6 +128,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
 
     Mod 从游戏自身的 DynamicVars 输出 ``damage`` / ``block`` / ``hits`` /
     ``vulnerable`` / ``weak``. 旧版仅提供 ``description``, 下方解析逻辑仍支持该形状.
+    ``strength`` / ``dexterity`` 目前没有结构化字段, 只能从描述中提取:
+    能力牌的全部价值都在这里, 不解析就等于在模拟中空过.
     """
     desc = card.get("description") or ""
 
@@ -111,7 +160,16 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "vulnerable": _field(card, "vulnerable", _VULN),
         "weak": _field(card, "weak", _WEAK),
         "draw": _field(card, "draw", _DRAW),
-        "energy": _field(card, "energy", _ENERGY),
+        # 能量可能是结构化字段, 也可能被渲染成图标; 每个能量图标算 1 点.
+        "energy": _field(card, "energy", _ENERGY) or desc.count("energy_icon"),
+        # 以生命为费用的牌 (放血): 掉血必须计入, 否则 0 费产能会被高估.
+        "hp_cost": _first(_HP_COST, desc),
+        # 覆甲: 回合结束时按层数获得格挡.
+        "plated": _first(_PLATED, desc),
+        # 能力牌 (如燃烧) 的数值只在描述里: "获得2点力量。"
+        # Mod 尚未输出结构化字段, 因此这里始终尝试解析, 否则能力牌在模拟中等同空过.
+        "strength": _field(card, "strength", _STRENGTH_GAIN),
+        "dexterity": _field(card, "dexterity", _DEXTERITY_GAIN),
         "no_block_turns": _first(_NO_BLOCK_TURNS, desc),
         "unplayable_reason": card.get("unplayable_reason"),
     }
@@ -135,9 +193,43 @@ def parse_intent(intent: dict[str, Any]) -> tuple[int, int]:
     return 0, 1
 
 
+# "5×3" / "5x3" / "5*3": 标签里的单次伤害与次数.
+_MULTI = re.compile(r"(\d+)\s*[×xX*]\s*(\d+)")
+
+
+def resolved_attack(intent: dict[str, Any]) -> tuple[int, int]:
+    """返回敌人攻击的 (单次伤害, 次数), 优先使用游戏结算后的显示值.
+
+    ``damage`` / ``hits`` 字段是基础值, 不含敌方力量与虚弱修正:
+    例如基础 3 点、力量 2 点、攻击 3 次的意图会显示为 "5×3";
+    反过来, 敌人被虚弱时基础 4 点会显示为 3 点.
+    标签和描述是游戏结算后的文本, 因此有显示值时以显示值为准,
+    两者都没有时才退回基础数值.
+    """
+    displays: list[tuple[int, int]] = []
+
+    label = str(intent.get("label") or "").strip()
+    m = _MULTI.search(label)
+    if m:
+        displays.append((_int(m.group(1)), max(1, _int(m.group(2)))))
+    elif label.isdigit():
+        displays.append((_int(label), 1))
+
+    m = _DAMAGE.search(intent.get("description") or "")
+    if m:
+        displays.append((_int(m.group(1)), max(1, _int(m.group(2), 1) if m.group(2) else 1)))
+
+    displays = [item for item in displays if item[0] > 0]
+    if displays:
+        return max(displays, key=lambda item: item[0] * item[1])
+    return parse_intent(intent)
+
+
 def incoming_damage(enemy: dict[str, Any]) -> int:
     total = 0
     for intent in enemy.get("intents") or []:
-        dmg, hits = parse_intent(intent)
+        if (intent.get("type") or "").lower() != "attack":
+            continue
+        dmg, hits = resolved_attack(intent)
         total += dmg * hits
     return total

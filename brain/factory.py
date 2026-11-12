@@ -19,6 +19,7 @@ from .replay import Journal
 from .tools.build_flow import BuildFlowTool
 from .tools.combat_search import CombatSearchTool
 from .tools.map_router import MapRouterTool
+from .tools.potion_advisor import PotionAdvisor
 from .tools.select_tool import SelectTool
 from .tools.strategy import StrategyContext
 from .transport import Bridge
@@ -36,7 +37,7 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
         Bridge(base),
         map_agent=MapAgent(MapRouterTool(client, context)),
         build_agent=BuildAgent(BuildFlowTool(client, context)),
-        combat_agent=CombatAgent(CombatSearchTool()),
+        combat_agent=CombatAgent(CombatSearchTool(advisor=PotionAdvisor(client, context))),
         select_agent=SelectAgent(SelectTool(client, context)),
         strategy_context=context,
         journal=journal,
