@@ -251,18 +251,29 @@ def choose(client, state: GameState, context: StrategyContext, *, task: str,
             for index, action, details in candidates
         ],
     }
-    body = humanize(json.dumps(payload, ensure_ascii=False))
     actions = {index: action for index, action, _ in candidates}
+    note = ""
     for _ in range(max(1, attempts)):
+        # 重试时把失败原因放进 payload, 不能拼在 JSON 后面: 调用方会直接解析 body.
+        attempt_payload = dict(payload)
+        if note:
+            attempt_payload["previous_reply_invalid"] = note
+        body = humanize(json.dumps(attempt_payload, ensure_ascii=False))
         reply = client.json_chat(system, body)
         if not isinstance(reply, dict) or type(reply.get("choice")) is not int:
+            note = ("上一次回复不是合法的 JSON choice 整数，"
+                    "必须只输出 {\"choice\": <候选整数>, ...}。")
             continue
         if reply["choice"] not in actions:
+            note = (f"上一次返回的 choice={reply['choice']} 不在候选中"
+                    f"（候选只有 {sorted(actions)}），必须从中重新选择。")
             continue
         action = actions[reply["choice"]]
         try:
             action.check(state)
-        except ActionError:
+        except ActionError as error:
+            note = (f"上一次返回的 choice={reply['choice']} 当前不可执行"
+                    f"（{error}），必须换一个候选。")
             continue
         plan = reply.get("build_plan")
         if isinstance(plan, str) and plan.strip():

@@ -103,6 +103,11 @@ class Card:
     per_turn_hp_cost: int = 0
     # 全身撞击: 伤害等于打出时的格挡.
     body_slam: bool = False
+    # 欺凌: 目标每层易伤额外伤害; 灰烬打击: 消耗堆每张额外伤害.
+    per_vulnerable: int = 0
+    per_exhaust: int = 0
+    # 打出后自身消耗 (战栗/契约终章), 计入灰烬打击的成长.
+    exhaust: bool = False
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -144,6 +149,9 @@ class Card:
             per_turn_block=parsed.get("per_turn_block", 0),
             per_turn_hp_cost=parsed.get("per_turn_hp_cost", 0),
             body_slam=parsed.get("body_slam", False),
+            per_vulnerable=parsed.get("per_vulnerable", 0),
+            per_exhaust=parsed.get("per_exhaust", 0),
+            exhaust=parsed.get("exhaust", False),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

@@ -37,6 +37,12 @@ _FUTURE_BLOCK = re.compile(r"接下来的\s*(\d+)\s*个回合开始时[^。]*?�
 _RANDOM_EXHAUST = re.compile(r"随机消耗\s*(\d+)\s*张牌")
 # 全身撞击: "造成你当前格挡值的伤害。" 伤害取决于打出时的格挡, 不能用固定值.
 _BODY_SLAM = re.compile(r"当前格挡值?\s*的伤害")
+# 欺凌: "该敌人身上每有一层易伤就额外造成2点伤害。" 伤害随目标易伤层数成长.
+_PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点伤害")
+# 灰烬打击: "你的消耗牌堆中每有一张牌，伤害增加3。"
+_PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
+# 桥接对"条件伤害"牌会给 0, 这时回到描述里取基础伤害.
+_DAMAGE_TEXT = re.compile(r"造成\s*(\d+)\s*点伤害")
 # 每回合开始的效果 (绯红披风): "在你的回合开始时，失去1点生命并获得8点格挡。"
 _PER_TURN_BLOCK = re.compile(
     r"回合开始时[^。]*?失去\s*(\d+)\s*点生命[^。]*?获得\s*(\d+)\s*点格挡")
@@ -157,6 +163,15 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     block = _field(card, "block", _BLOCK)
     hits = _int(card.get("hits"), 0) if "hits" in card else 0
 
+    # 条件伤害牌 (欺凌/灰烬打击/全身撞击): 桥接按"当前条件"算出 0,
+    # 基础伤害要回到描述里取, 否则会被当成 0 伤牌永远不打.
+    conditional = (_BODY_SLAM.search(desc) or _PER_VULNERABLE.search(desc)
+                   or _PER_EXHAUST.search(desc))
+    if conditional and not damage:
+        m = _DAMAGE_TEXT.search(desc)
+        if m:
+            damage = _int(m.group(1))
+
     if "damage" not in card:
         m = _DAMAGE.search(desc)
         if m and m.group(2):
@@ -192,9 +207,14 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "plated": _first(_PLATED, desc),
         # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
         "body_slam": bool(_BODY_SLAM.search(desc)),
+        # 欺凌 / 灰烬打击: 伤害随易伤层数或消耗堆成长.
+        "per_vulnerable": _first(_PER_VULNERABLE, desc),
+        "per_exhaust": _first(_PER_EXHAUST, desc),
         # 后续回合的格挡 (坚韧之环): 回合数与每回合格挡分开记, 由搜索按剩余回合折算.
         "future_block_turns": future_block_turns,
         "future_block_per_turn": future_block_per_turn,
+        # 自身消耗 (战栗/契约终章): 影响灰烬打击的成长, 也影响本场牌堆.
+        "exhaust": "消耗。" in desc,
         # 随机消耗 (未升级的坚毅): 可能烧掉手牌里的核心牌, 需要计入代价.
         "random_exhaust": _first(_RANDOM_EXHAUST, desc),
         # 每回合开始的格挡与其生命代价 (绯红披风).

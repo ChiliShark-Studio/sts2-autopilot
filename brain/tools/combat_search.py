@@ -193,6 +193,8 @@ class _Sim:
     cards_played: int = 0
     # 打出后会在后续回合持续产生的价值 (例如薪火之源每回合 +1 能量).
     future_value: float = 0.0
+    # 本场已消耗的牌数 (灰烬打击按它成长).
+    exhausted: int = 0
     frail: int = 0
     # 复制药水: 下一张牌打出两次.
     duplicate_next: int = 0
@@ -278,7 +280,13 @@ class _Sim:
             for enemy in targets:
                 if not enemy.alive:
                     continue
-                dmg = (self.block if card.body_slam else card.damage) + self.strength
+                # 条件伤害: 全身撞击用格挡, 欺凌按易伤层数, 灰烬打击按消耗数.
+                base = self.block if card.body_slam else card.damage
+                if card.per_vulnerable:
+                    base += card.per_vulnerable * enemy.vulnerable
+                if card.per_exhaust:
+                    base += card.per_exhaust * self.exhausted
+                dmg = base + self.strength
                 if enemy.vulnerable:
                     dmg = int(dmg * 1.5)
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
@@ -324,6 +332,8 @@ class _Sim:
             turns = self.future_turns()
             net = max(0, card.per_turn_block - card.per_turn_hp_cost)
             self.future_value += turns * net * self.hp_weight()
+        if card.exhaust:
+            self.exhausted += 1
         if card.random_exhaust:
             # 随机消耗烧掉哪张不可控: 按剩余手牌的平均价值折算期望损失.
             # 先把能打的牌打完再打它, 手牌变少/变废时损失自然降低.
