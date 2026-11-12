@@ -1,8 +1,7 @@
-"""Composition root: build a live agent out of the pieces.
+"""组装入口: 使用各组件构建连接真实游戏的 Agent.
 
-This is the one place that knows about all concrete implementations.  Swapping
-the combat search for MCTS, or the map LLM for a different model, is a change
-here and nowhere else.
+这里集中引用所有具体实现. 替换战斗搜索为 MCTS, 或更换地图 LLM 时,
+只需调整此处的组装代码.
 """
 
 from __future__ import annotations

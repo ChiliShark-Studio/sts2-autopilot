@@ -1,11 +1,10 @@
-"""Model parsing.
+"""模型解析测试.
 
-Two paths matter and both are covered here:
+覆盖两条重要路径:
 
-* ``captures/combat-001.json`` predates the mod patch, so it only has Chinese
-  descriptions -- parsing it proves the text fallback still works against real
-  data.
-* a state with the patched numeric fields proves the structured values win.
+* ``captures/combat-001.json`` 来自 Mod 补丁之前, 只有中文描述,
+  用真实数据确认文本解析兜底仍然有效.
+* 使用带结构化数值字段的状态, 确认优先读取结构化值.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ class ModelTests(unittest.TestCase):
         self.assertGreater(len(state.battle.hand), 0)
 
     def test_text_fallback_reads_damage_from_description(self):
-        """The capture has no numeric fields -- the parser must still get 6."""
+        """采集状态中没有数值字段, 解析器仍应得到伤害 6."""
         state = GameState.parse(load_capture())
         assert state.battle is not None
         strike = state.battle.hand[0]
@@ -57,12 +56,12 @@ class ModelTests(unittest.TestCase):
         state = GameState.parse(payload)
         assert state.battle is not None
         card = state.battle.hand[0]
-        self.assertEqual(card.damage, 9)  # not the 1 from the text
+        self.assertEqual(card.damage, 9)  # 使用结构化数值, 而非文本中的 1
         self.assertEqual(card.hits, 2)
-        self.assertEqual(state.battle.incoming, 14)  # 7 x 2
+        self.assertEqual(state.battle.incoming, 14)  # 每次伤害 7, 共 2 次
 
     def test_star_cost_cards_are_not_playable(self):
-        """Regent cards cost stars, which we do not model -- never attempt them."""
+        """储君卡牌消耗星星, 当前未建模该资源, 不应尝试打出."""
         state = GameState.parse({
             "state_type": "monster",
             "battle": {"turn": "player", "ready_for_action": True, "enemies": []},

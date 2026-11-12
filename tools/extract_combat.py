@@ -1,20 +1,18 @@
-"""Extract combat decisions from run journals into a small, commit-able dataset.
+"""从对局日志提取战斗决策, 生成适合提交到仓库的小型数据集.
 
-Why: `logs/` holds every step of every run (1-3 MB each, mostly waiting), so it
-stays git-ignored.  What we actually tune the combat algorithm on is far smaller:
-the states where a combat decision was made, plus the decision itself.
+``logs/`` 保存每局的所有步骤, 每份约 1-3 MB, 多数是等待帧, 因此不入库.
+战斗调参只需保留真正作出战斗决策时的状态和决策本身.
 
     python tools/extract_combat.py logs data/combat
 
-Output is one JSONL per source run:
+每份源日志输出一份 JSONL:
 
     {"step": 42, "fight": "1-13", "ascension": 0, "act": 1, "floor": 13, "turn": 2,
      "enemies": [{"name": "飞蝇菌子", "hp": 49}], "hand": ["打击", "防御"],
      "energy": 3, "hp": 34, "max_hp": 70, "state": {...}, "decision": {...}}
 
-The top-level summary duplicates what is inside ``state`` on purpose: it makes
-the file readable (and greppable) without parsing a 7 KB blob, and ``fight``
-groups the decisions that belong to the same encounter.
+顶层摘要有意重复 ``state`` 内的信息, 便于直接阅读和检索,
+无需展开完整状态; ``fight`` 用于归组同一场战斗的决策.
 """
 
 from __future__ import annotations
@@ -28,7 +26,7 @@ COMBAT_SCREENS = {"monster", "elite", "boss", "hand_select", "card_select"}
 
 
 def summarize(state: dict[str, Any]) -> dict[str, Any]:
-    """Pull the context a human (or a filter) wants without opening ``state``."""
+    """提取便于阅读和过滤的上下文, 无需展开完整 ``state``."""
     battle = state.get("battle") or {}
     player = state.get("player") or {}
     run = state.get("run") or {}
@@ -60,7 +58,7 @@ def iter_journal(path: Path) -> Iterable[dict[str, Any]]:
             try:
                 yield json.loads(line)
             except json.JSONDecodeError:
-                continue  # a truncated tail should not kill the whole file
+                continue  # 末尾截断不应阻止读取整份文件
 
 
 def extract(path: Path) -> list[dict[str, Any]]:
@@ -70,7 +68,7 @@ def extract(path: Path) -> list[dict[str, Any]]:
         if screen not in COMBAT_SCREENS:
             continue
         decision = entry.get("decision") or {}
-        # "none"/"wait" rows are just "enemy turn, nothing to do" -- no signal.
+        # "none" / "wait" 仅表示敌方回合等无需操作的状态, 没有决策信息.
         if decision.get("tool") in (None, "", "none"):
             continue
         state = entry.get("state")

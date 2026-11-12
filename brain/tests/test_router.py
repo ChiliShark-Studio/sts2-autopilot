@@ -1,4 +1,4 @@
-"""Router and contract tests -- no game, no network."""
+"""路由与契约测试, 无需游戏或网络."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class ContractTests(unittest.TestCase):
     def test_request_wire_shape_is_json_safe(self):
         request = DecisionRequest(kind=DecisionKind.MAP, state=state("map"))
         wire = request.to_wire()
-        # Must survive a round trip into JSON: this is what a C# port reads.
+        # 必须支持 JSON 序列化和反序列化, 后续 C# 移植读取相同形状.
         import json
 
         self.assertEqual(json.loads(json.dumps(wire))["kind"], "map")

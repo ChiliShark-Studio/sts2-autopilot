@@ -1,4 +1,4 @@
-"""Combat agent: owns combat decisions, delegates the search to a tool."""
+"""战斗 Agent: 负责战斗决策, 将搜索交给工具实现."""
 
 from __future__ import annotations
 

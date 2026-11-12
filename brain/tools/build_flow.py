@@ -1,12 +1,11 @@
-"""Build tool: rewards, card picks, and (for now) nothing else.
+"""构筑工具: 处理奖励和选牌, 其他界面暂不处理.
 
-Two facts drive the logic here, both learned from a live run:
+流程基于真实对局中发现的两条规则:
 
-* a card reward entry is **not consumed** by ``skip_card_reward`` -- it stays in
-  the reward list, so re-claiming it reopens the picker and looks like a hang.
-  Correct order is: claim real loot, open the card once, pick, then proceed.
-* an unhandled build screen (shop, event, rest) is left alone.  Returning no
-  action stops the loop for one manual look instead of clicking blind.
+* ``skip_card_reward`` 不会消耗卡牌奖励条目, 再次领取会重开选牌界面,
+  看起来像卡住. 正确顺序是先领取实际物品, 只打开一次选牌, 选择后继续前进.
+* 未处理的构筑界面 (商店, 事件, 篝火) 不执行动作,
+  返回空动作使主循环停下供人工检查, 避免盲目点击.
 """
 
 from __future__ import annotations
@@ -32,14 +31,14 @@ from ..model import Card
 
 RARITY_BONUS = {"Basic": 0.0, "Common": 0.3, "Uncommon": 0.9, "Rare": 1.8}
 SKIP_THRESHOLD = 2.0
-# Cards whose value is in their effect, not their numbers (powers, engines),
-# still need a floor -- otherwise they score 0 and get discarded/transformed.
+# 依靠效果发挥价值的牌 (能力牌, 运转核心) 也需要最低评分,
+# 否则会得到 0 分, 被轻易丢弃或变化.
 BASE_VALUE = 1.0
 TYPE_BONUS = {"power": 1.5}
 
 
 def card_score(card: Card) -> float:
-    """Value per energy, with a small rarity bonus. Crude by design."""
+    """按每点能量的收益评分, 加少量稀有度奖励, 刻意保持简单."""
     cost = max(1, card.cost)
     value = BASE_VALUE + card.damage * card.hits + card.block * 0.9
     value += card.vulnerable * 3 + card.weak * 2 + card.draw * 2 + card.energy * 3
@@ -47,17 +46,17 @@ def card_score(card: Card) -> float:
     return value / cost + RARITY_BONUS.get(card.rarity, 0.0)
 
 
-# Rarity matters much more when deciding what to throw away: a Rare with no
-# visible numbers is usually an engine, not a bad card.
+# 决定弃牌时应更重视稀有度: 没有明显伤害或格挡数值的 Rare 牌
+# 通常是运转核心, 不应简单视为差牌.
 KEEP_WEIGHT = {"Basic": 0.0, "Common": 0.5, "Uncommon": 2.0, "Rare": 5.0}
 
 
 def discard_score(card: Card) -> float:
-    """Lower means 'safer to discard'."""
+    """分数越低, 越适合弃掉."""
     return card_score(card) + KEEP_WEIGHT.get(card.rarity, 1.0)
 
 
-# Shop behaviour: keep a gold reserve, and only buy a card that is clearly good.
+# 商店策略: 保留一定金币, 只购买明显有价值的卡牌.
 SHOP_RESERVE = 40
 SHOP_CARD_THRESHOLD = 3.0
 
@@ -75,7 +74,7 @@ CARD_SYSTEM_PROMPT = """你是《杀戮尖塔2》的构筑助手。为当前卡�
 
 
 def _card_dict_value(card: dict) -> float:
-    """Value of a raw card dict (bundle entries only carry the text stats)."""
+    """评估原始卡牌字典的价值, 卡牌包条目只携带文本数值."""
     from ..effects import parse_card
 
     parsed = parse_card(card)
@@ -86,7 +85,7 @@ def _card_dict_value(card: dict) -> float:
 
 
 def _shop_card_value(item: dict) -> float:
-    """Score a shop card from its rendered description (no numeric fields there)."""
+    """从商店卡牌的描述文本评分, 该处没有结构化数值字段."""
     from ..effects import parse_card
 
     parsed = parse_card({
@@ -106,7 +105,7 @@ _HEAL_EVENT = re.compile(r"回复\s*(\d+)\s*点生命")
 _MAX_HP_GAIN = re.compile(r"获得\s*(\d+)\s*点最大生命")
 _LEAVE_HINTS = ("放弃", "离开", "结束", "不读了")
 
-# Never let an event put us below these.
+# 事件选择不得突破以下安全阈值.
 EVENT_HP_FLOOR = 15
 EVENT_MAX_HP_LOSS_RATIO = 0.15
 EVENT_COST_WEIGHT = 1.5
@@ -120,10 +119,10 @@ def _first_int(pattern: re.Pattern[str], text: str) -> int:
 
 
 def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
-    """Score an event option, or None when it is too dangerous to take.
+    """为事件选项评分, 代价过高时返回 None.
 
-    Events are where the bot bled out: 真理石板 charges escalating max-HP costs
-    (3, 6, 12, 24, 45) and the old policy just always picked index 0.
+    真理石板会逐步扣除最大生命 (3, 6, 12, 24, 45).
+    旧策略总选索引 0, 曾因此损失大量生命.
     """
     desc = option.get("description") or ""
     title = option.get("title") or ""
@@ -139,7 +138,7 @@ def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
     curse = 1 if "诅咒" in text else 0
     upgrades = 2 if "所有" in text and "升级" in text else (1 if "升级" in text else 0)
 
-    # Hard safety gates.
+    # 必须满足的安全条件.
     if hp - hp_loss <= EVENT_HP_FLOOR:
         return None
     if max_hp_loss and max_hp - max_hp_loss < max_hp * 0.5:
@@ -159,8 +158,8 @@ class BuildFlowTool:
     name = "build_flow"
 
     def __init__(self, client=None) -> None:
-        # Optional LLM for card picks: the heuristic cannot price scaling cards
-        # (完美打击, 破灭) and therefore kept taking bland stat cards like 铁斩波.
+        # 可选的 LLM 选牌: 启发式难以评价成长型卡牌,
+        # 例如完美打击和破灭, 因此此前总是选择铁斩波等普通数值牌.
         self.client = client
         self._pending_card_open = False
         self._shop_bought = False
@@ -180,7 +179,7 @@ class BuildFlowTool:
             return self._shop(request)
         if request.scene == "bundle_select":
             return self._bundle(request)
-        # shop / treasure: deliberately unimplemented.
+        # 商店 / 宝箱: 暂不实现.
         return Decision(action=None, reason=f"未实现的界面: {request.scene}", source=Source.NONE, tool=self.name)
 
     def _card_reward(self, request: DecisionRequest) -> Decision:
@@ -191,7 +190,7 @@ class BuildFlowTool:
         if self.client is not None:
             choice, reason, extra = self._llm_card_choice(request)
             if choice is None:
-                # -1 means the model wants to skip; anything invalid -> heuristic.
+                # -1 表示模型希望跳过; 非法结果退回启发式.
                 pass
             elif choice == -1:
                 self._pending_card_open = True
@@ -212,7 +211,7 @@ class BuildFlowTool:
                         source=Source.HEURISTIC, tool=self.name)
 
     def _llm_card_choice(self, request: DecisionRequest) -> tuple[Optional[int], str, dict]:
-        """Ask the model to pick a card (or -1 to skip). Returns (None, _) on failure."""
+        """请求模型选牌, -1 表示跳过; 失败时返回 (None, _, _)."""
         state = request.state
         player = state.player
         candidates = state.card_reward
@@ -249,10 +248,10 @@ class BuildFlowTool:
         return choice, str(reply.get("reason") or ""), extra
 
     def _event(self, request: DecisionRequest) -> Decision:
-        """Pick the option with the best gain/cost, never the one that bleeds us.
+        """选择收益与代价更合适的选项, 避免不断付出生命.
 
-        真理石板 charges 3/6/12/24/45 max HP for upgrades; the old "always index
-        0" rule walked that ladder down to 1 HP.
+        真理石板以 3/6/12/24/45 点最大生命换取升级,
+        旧策略始终选索引 0, 曾将最大生命降至 1.
         """
         event = request.state.raw.get("event") or {}
         if event.get("in_dialogue"):
@@ -261,7 +260,7 @@ class BuildFlowTool:
         options = [o for o in (event.get("options") or [])
                    if isinstance(o, dict) and not o.get("is_locked")]
         if not options:
-            # Events rebuild their buttons between pages; empty is transient.
+            # 事件换页时会重建按钮, 暂时没有选项属于过渡状态.
             return WAIT
 
         player = request.state.player
@@ -289,7 +288,7 @@ class BuildFlowTool:
                         source=Source.HEURISTIC, tool=self.name)
 
     def _rest(self, request: DecisionRequest) -> Decision:
-        """Rest site: heal when hurt, otherwise upgrade. Also handles 'proceed'."""
+        """篝火: 血量不足时治疗, 否则升级; 同时处理 proceed."""
         site = request.state.raw.get("rest_site") or {}
         if site.get("can_proceed"):
             return Decision(action=Proceed(), reason="离开篝火", source=Source.SCRIPT, tool=self.name)
@@ -299,7 +298,7 @@ class BuildFlowTool:
         if not options:
             return WAIT
 
-        # The prompt naming is localised, but the ids are stable.
+        # 提示名称会随语言变化, id 保持稳定.
         want = "HEAL" if request.state.player.hp_ratio < 0.6 else "SMITH"
         pick = next((o for o in options if str(o.get("id")).upper() == want), options[0])
         reason = f"{pick.get('name', '')}: {pick.get('description', '')}"[:60]
@@ -307,7 +306,7 @@ class BuildFlowTool:
                         source=Source.HEURISTIC, tool=self.name)
 
     def _treasure(self, request: DecisionRequest) -> Decision:
-        """Chest: take the relic, then leave. Relics only appear after the animation."""
+        """宝箱: 先领取遗物再离开, 遗物在动画结束后才出现."""
         treasure = request.state.raw.get("treasure") or {}
         relics = [r for r in (treasure.get("relics") or []) if isinstance(r, dict)]
         if relics:
@@ -320,7 +319,7 @@ class BuildFlowTool:
         return WAIT
 
     def _shop(self, request: DecisionRequest) -> Decision:
-        """Buy at most one good card, then leave. Keeps a gold reserve."""
+        """最多购买一张高价值卡牌后离开, 保留一定金币."""
         shop = request.state.raw.get("shop") or {}
         if shop.get("can_proceed") or self._shop_bought:
             self._shop_bought = False
@@ -351,7 +350,7 @@ class BuildFlowTool:
         return Decision(action=Proceed(), reason="没有值得买的，离开", source=Source.SCRIPT, tool=self.name)
 
     def _bundle(self, request: DecisionRequest) -> Decision:
-        """Pick the card bundle with the best total value, then confirm."""
+        """选择总价值最高的卡牌包, 然后确认."""
         bundle = request.state.raw.get("bundle_select") or {}
         if bundle.get("can_confirm") or bundle.get("preview_showing"):
             return Decision(action=ConfirmBundleSelection(), reason="确认卡牌包",
@@ -376,8 +375,8 @@ class BuildFlowTool:
         player = request.state.player
         potions_full = len(player.potions) >= player.max_potion_slots
 
-        # A potion reward cannot be claimed with full slots; re-claiming it is
-        # how the loop got stuck, so treat it as unclaimable and move on.
+        # 药水槽位已满时无法领取药水奖励, 重复领取会导致卡住,
+        # 因此将其视为不可领取并继续前进.
         claimable = [
             r for r in items
             if r.type != "card" and not (r.type == "potion" and potions_full)

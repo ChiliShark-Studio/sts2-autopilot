@@ -1,26 +1,22 @@
-"""Combat tool: one-turn beam search over the real hand, plus potion timing.
+"""战斗工具: 对当前手牌进行单回合束搜索, 并判断药水使用时机.
 
-This is *not* MCTS. It is a beam search over the legal plays available this
-turn, scored by a hand-written evaluation. We have no fast simulator for StS2,
-so a deep tree search would need hundreds of full-state clones per decision.
+使用手写评分比较本回合合法出牌, 不使用 MCTS.
+由于缺少快速的完整 StS2 模拟器, 深层搜索会产生大量完整状态复制.
 
-What it models:
+当前模型:
 
-    damage  = card.damage + strength, x1.5 on vulnerable, x0.75 on weak
-    block   = card.block + dexterity, x0.75 on frail
-    score   = -enemy_hp - hp_weight * unblocked + 0.1 * leftover_block
-              + vulnerable/weak/strength/dexterity value
+    伤害 = card.damage + strength, 易伤时乘 1.5, 虚弱时乘 0.75
+    格挡 = card.block + dexterity, 脆弱时乘 0.75
+    得分 = -enemy_hp - hp_weight * unblocked + 0.1 * leftover_block
+           + 易伤 / 虚弱 / 力量 / 敏捷的状态价值
 
-``hp_weight`` is adaptive: at full HP one point of our HP is worth ~0.4 enemy
-HP (trade freely); at low HP it is worth ~2.0 (block first).
+``hp_weight`` 随血量变化: 满血时, 自身 1 点生命约值敌方 0.4 点生命;
+残血时约值敌方 2.0 点生命, 更重视格挡.
 
-Potions are checked before spending energy, but only when they change the
-outcome: without one we die this turn, or with one this turn kills. A potion
-is a one-shot resource; drinking it on a fight we would win anyway is a loss
-later.
+在消耗能量前检查药水, 主要用于改变保命或斩杀结果.
+药水是一次性资源, 在无需药水也能获胜的战斗中使用会减少后续可用资源.
 
-The tool is standalone: ``decide_state(raw_dict)`` needs nothing but a state
-JSON, which is what makes offline benchmarking and the eventual C# port easy.
+``decide_state(raw_dict)`` 只依赖状态 JSON, 便于离线基准比较和后续 C# 移植.
 """
 
 from __future__ import annotations
@@ -32,9 +28,9 @@ from typing import Any, Optional
 from ..actions import EndTurn, PlayCard, UsePotion
 from ..contracts import WAIT, Decision, DecisionKind, DecisionRequest, Source
 from ..effects import parse_potion
-from ..model import Battle, Card, Player
+from ..model import Battle, Card, Player, Potion
 
-# Adaptive HP weight: value of 1 own HP in enemy-HP units.
+# 自适应血量权重: 自身 1 点生命对应的敌方生命价值.
 HP_WEIGHT_FULL = 0.4
 HP_WEIGHT_LOW = 2.0
 OVERBLOCK_WEIGHT = 0.1
@@ -42,27 +38,27 @@ VULNERABLE_VALUE = 3.0
 WEAK_VALUE = 2.0
 STRENGTH_VALUE = 2.0
 DEXTERITY_VALUE = 1.5
-# Minimum simulated gain (in enemy-HP units) before a buff potion is worth it.
+# 使用增益药水所需的最低模拟收益, 以敌方生命值为单位.
 POTION_MIN_GAIN = 15.0
-# Fallback upgrade numbers when the bridge does not expose the upgraded card.
+# 桥接未提供升级数值时使用的固定增量.
 UPGRADE_DAMAGE_BONUS = 3
 UPGRADE_BLOCK_BONUS = 3
-# Score cost per future turn of "cannot gain block from cards" (应急按钮).
+# 应急按钮造成后续无法从卡牌获得格挡时, 每回合的评分代价.
 NO_BLOCK_TURN_PENALTY = 8.0
 
-# Powers are keyed by id now; keep the localised names as aliases so older
-# states (and hand-written tests) still resolve.
+# 状态使用 id 作为键, 同时保留本地化名称别名,
+# 以支持旧状态和手写测试.
 _STRENGTH = {"力量", "strength", "Strength", "STRENGTH_POWER"}
 _DEXTERITY = {"敏捷", "dexterity", "Dexterity", "DEXTERITY_POWER"}
 _VULNERABLE = {"易伤", "vulnerable", "Vulnerable", "VULNERABLE_POWER"}
 _WEAK = {"虚弱", "weak", "Weak", "WEAK_POWER"}
 _FRAIL = {"脆弱", "frail", "Frail", "FRAIL_POWER"}
-# Damage-reduction powers: the two that made the floor-17 review pointless.
+# 减伤状态: 第 17 层复盘暴露的两种关键效果.
 _SLIPPERY = {"滑溜", "slippery", "SLIPPERY_POWER"}
 _INTANGIBLE = {"无实体", "intangible", "INTANGIBLE_POWER"}
-# "本回合下一张牌额外打出一次" (复制药水) applies this power to the player.
+# 复制药水的 "本回合下一张牌额外打出一次" 效果对应此玩家状态.
 _DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
-# Player-side debuffs that change the arithmetic.
+# 会改变数值结算的玩家负面状态.
 _SHRINK = {"缩小", "shrink", "SHRINK_POWER"}
 _NO_BLOCK = {"不可格挡", "no block", "NO_BLOCK_POWER"}
 
@@ -75,11 +71,10 @@ def _power(powers: dict[str, int], aliases: set[str]) -> int:
 
 
 def _upgraded(card: Card) -> Card:
-    """Best-effort upgraded version of a hand card.
+    """尽量准确地生成一张手牌的升级版本.
 
-    Uses the bridge-provided numbers when present, otherwise a flat bonus --
-    which is why a mod patch later can improve accuracy without touching the
-    potion logic.
+    优先使用桥接提供的升级数值, 缺失时采用固定增量.
+    后续 Mod 可以通过提供准确数值改善结果, 无需修改药水逻辑.
     """
     if card.upgraded:
         return card
@@ -101,9 +96,9 @@ class _Enemy:
     incoming: int = 0
     vulnerable: int = 0
     weak: int = 0
-    # 滑溜: the next N times it would lose HP, it loses 1 instead.
+    # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
     slippery: int = 0
-    # 无实体: every hit is capped at 1.
+    # 无实体: 每次命中的伤害上限为 1.
     intangible: bool = False
 
     @property
@@ -122,13 +117,13 @@ class _Sim:
     strength: int = 0
     dexterity: int = 0
     frail: int = 0
-    # 复制药水: the next card played is played twice.
+    # 复制药水: 下一张牌打出两次.
     duplicate_next: int = 0
-    # 虚弱 / 缩小 (attack damage), 不可格挡 (no block from cards).
+    # 虚弱 / 缩小影响攻击伤害, 不可格挡会阻止从卡牌获得格挡.
     weak: bool = False
     shrink: bool = False
     no_block: bool = False
-    # Turns of "no block" this turn's cards would add (downside we must price).
+    # 本回合卡牌新增的不可格挡回合数, 需要计入负面代价.
     no_block_turns: int = 0
 
     @classmethod
@@ -199,8 +194,8 @@ class _Sim:
                     dmg = int(dmg * 0.75)
                 if self.shrink:
                     dmg = int(dmg * 0.70)
-                # Damage-reduction powers cap the hit, per hit (so multi-hit
-                # attacks burn 滑溜 stacks faster -- the sim now sees that).
+                # 减伤状态逐次限制命中伤害,
+                # 因此多段攻击会更快消耗滑溜层数.
                 if enemy.intangible:
                     dmg = min(dmg, 1)
                 elif enemy.slippery > 0:
@@ -214,7 +209,7 @@ class _Sim:
         if self.frail:
             gain = int(gain * 0.75)
         if self.no_block:
-            gain = 0  # 不可格挡: cards cannot grant block
+            gain = 0  # 不可格挡: 无法从卡牌获得格挡.
         self.block += max(0, gain) * multiplier
         if card.no_block_turns:
             self.no_block_turns += card.no_block_turns
@@ -229,7 +224,7 @@ class _Sim:
         return sum(e.incoming for e in self.enemies if e.alive)
 
     def firepower(self) -> int:
-        """Upper bound of damage this turn -- used by the lethal shortcut."""
+        """粗略估计本回合火力, 仅供日志参考, 不作为斩杀依据."""
         total = 0
         energy = self.energy
         for card in self.hand:
@@ -239,10 +234,10 @@ class _Sim:
         return total
 
     def apply_potion(self, eff: dict[str, int], target: Optional[int] = None) -> None:
-        """Apply a potion's parsed effect to this simulated state.
+        """将解析后的药水效果应用到模拟状态.
 
-        Potions are free actions, so the decision layer tries one, re-plans, and
-        compares. Damage still goes through the reduction powers.
+        药水不消耗能量, 因此先模拟使用, 再重新规划并比较结果.
+        伤害仍需经过减伤状态结算.
         """
         targets = (
             [self.enemies[target]]
@@ -271,13 +266,13 @@ class _Sim:
         if eff.get("strength"):
             self.strength += eff["strength"]
         if eff.get("upgrade_hand"):
-            # Card-enhancement potions change the hand itself; the re-plan then
-            # prices the upgrade through normal card scoring.
+            # 强化卡牌的药水直接改变手牌,
+            # 重新规划时通过普通卡牌评分评估升级收益.
             self.hand = [_upgraded(c) for c in self.hand]
         if eff.get("duplicate_next"):
             self.duplicate_next = 1
         if eff.get("draw"):
-            self.energy += 0  # drawing is not modelled; keep the potion neutral
+            self.energy += 0  # 抽牌尚未建模, 暂不给该效果增加收益.
         for enemy in targets:
             if eff.get("vulnerable"):
                 enemy.vulnerable += eff["vulnerable"]
@@ -286,7 +281,7 @@ class _Sim:
 
     @property
     def has_damage_reduction(self) -> bool:
-        """True when raw numbers overstate damage (滑溜 / 无实体)."""
+        """存在滑溜 / 无实体时返回 True, 表示原始数值可能高估伤害."""
         return any(e.slippery > 0 or e.intangible for e in self.enemies if e.alive)
 
     def value(self) -> float:
@@ -309,8 +304,8 @@ class _Sim:
         score += sum(e.weak for e in alive) * WEAK_VALUE
         score += self.strength * STRENGTH_VALUE
         score += self.dexterity * DEXTERITY_VALUE
-        # 应急按钮's downside lands on later turns; price it here so the search
-        # does not treat 40 block as free.
+        # 应急按钮的负面效果在后续回合生效, 这里计入代价,
+        # 避免搜索将 40 点格挡视为没有额外代价.
         score -= self.no_block_turns * NO_BLOCK_TURN_PENALTY
         return score
 
@@ -319,10 +314,25 @@ class _Sim:
 class _Plan:
     sequence: list[tuple[int, Optional[int]]] = field(default_factory=list)
     score: float = 0.0
+    damage_taken: int = 0
+    hp_left: int = 0
+    won: bool = False
+
+    @classmethod
+    def from_sim(cls, sim: _Sim, sequence: list[tuple[int, Optional[int]]]) -> "_Plan":
+        """记录出牌终点的评分和预计回合末结果, 不改变模拟状态."""
+        damage_taken = max(0, sim.total_incoming() - sim.block)
+        return cls(
+            sequence=sequence,
+            score=sim.value(),
+            damage_taken=damage_taken,
+            hp_left=sim.hp - damage_taken,
+            won=sim.hp > 0 and not any(e.alive for e in sim.enemies),
+        )
 
 
 def _plan(sim: _Sim, beam: int = 10, depth: int = 7) -> _Plan:
-    best = _Plan([], sim.value())
+    best = _Plan.from_sim(sim, [])
     frontier = [(sim, [])]
     for _ in range(depth):
         expanded = []
@@ -337,7 +347,7 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7) -> _Plan:
         expanded.sort(key=lambda item: item[0], reverse=True)
         frontier = [(node, seq) for _, node, seq in expanded[:beam]]
         if expanded[0][0] > best.score:
-            best = _Plan(expanded[0][2], expanded[0][0])
+            best = _Plan.from_sim(expanded[0][1], expanded[0][2])
     return best
 
 
@@ -353,33 +363,19 @@ class CombatSearchTool:
         battle = state.battle
         if battle is None or not battle.can_act:
             return WAIT
-        if not battle.hand:
-            return Decision(action=EndTurn(), reason="手牌为空", source=Source.SCRIPT, tool=self.name)
 
-        # Potions are free actions: check them before spending energy.
-        potion = self._potion(state)
+        # 同一次决策复用基础状态和搜索结果, 下一次决策仍从新状态重新计算.
+        sim = _Sim.build(state.player, battle)
+        plan = _plan(sim, self.beam, self.depth)
+
+        # 药水不消耗能量, 在出牌消耗能量前检查.
+        potion = self._potion(state, sim, plan)
         if potion is not None:
             return potion
 
-        sim = _Sim.build(state.player, battle)
+        if not battle.hand:
+            return Decision(action=EndTurn(), reason="手牌为空", source=Source.SCRIPT, tool=self.name)
 
-        # Lethal shortcut: only when the numbers are honest.
-        if not sim.has_damage_reduction and sim.firepower() >= sum(e.hp for e in sim.enemies if e.alive):
-            best_attack = max(
-                (c for c in sim.hand if c.can_play and c.damage > 0 and c.cost <= sim.energy),
-                key=lambda c: c.damage * c.hits,
-                default=None,
-            )
-            if best_attack is not None:
-                target = max((e for e in sim.enemies if e.alive), key=lambda e: e.hp, default=None)
-                return Decision(
-                    action=PlayCard(best_attack, target.entity_id if target else None),
-                    reason=f"斩杀线内（火力 {sim.firepower()} ≥ 敌方总血），打最大伤害",
-                    source=Source.SEARCH,
-                    tool=self.name,
-                )
-
-        plan = _plan(sim, self.beam, self.depth)
         if not plan.sequence:
             return Decision(action=EndTurn(), reason="没有更优出牌", source=Source.SEARCH, tool=self.name)
 
@@ -393,90 +389,78 @@ class CombatSearchTool:
             f"{card.name} 伤害{card.damage}+{sim.strength} 格挡{card.block}+{sim.dexterity}"
             f" | 估值{plan.score:.0f} | 火力{sim.firepower()}"
         )
+        if plan.won:
+            reason = f"斩杀方案: {reason}"
         return Decision(action=PlayCard(card, target), reason=reason, source=Source.SEARCH, tool=self.name)
 
-    def _potion(self, state) -> Optional[Decision]:
-        """Try each potion in the simulator; drink only when it pays off.
+    def _potion(self, state, sim: _Sim, base: _Plan) -> Optional[Decision]:
+        """在模拟器中逐个尝试药水, 仅在收益足够时使用.
 
-        A potion is a free action but a one-shot resource, so the comparison is
-        "best plan without it" versus "best plan after applying it":
+        药水不消耗能量, 但只能使用一次, 因此比较不喝药与喝药后的最佳出牌方案:
 
-          * dying this turn -> any potion that keeps us alive;
-          * a potion that turns this turn lethal -> use it;
-          * a buff potion in a dangerous fight, when the gain is large enough.
+          * 当前回合将死亡时, 选择可以保命的药水.
+          * 药水能使本回合斩杀时使用.
+          * 危险战斗中, 增益药水带来足够收益时使用.
 
-        This is what makes strength/dexterity/vulnerable potions usable: before,
-        only raw block/heal/damage were understood.
+        基础状态和方案由本次决策传入, 避免重复构建与搜索.
+        保命和斩杀均以完整出牌方案的终点为准.
         """
         player = state.player
         potions = [p for p in player.potions if p.usable]
-        if not potions or state.battle is None:
+        if not potions or base.won:
             return None
 
-        sim = _Sim.build(player, state.battle)
-        alive = [e for e in sim.enemies if e.alive]
-        if not alive:
-            return None
-
-        base = _plan(sim, self.beam, self.depth)
-        if base.score >= 9000:  # value() returns 10000+ when everything dies
-            return None
-
-        net_incoming = max(0, sim.total_incoming() - sim.block)
-        dying = net_incoming >= sim.hp
         hp_ratio = sim.hp / sim.max_hp if sim.max_hp else 1.0
 
-        best: Optional[tuple[float, object, Optional[str], str]] = None
+        best: Optional[tuple[_Plan, Potion, Optional[str], str]] = None
         for potion in potions:
             eff = parse_potion(potion.description)
-            target_index = None
-            target_id = None
-            if potion.needs_enemy_target:
-                target_index = max(
-                    range(len(sim.enemies)),
-                    key=lambda i: sim.enemies[i].hp if sim.enemies[i].alive else -1,
-                )
-                target_id = sim.enemies[target_index].entity_id
-
-            trial = sim.clone()
-            trial.apply_potion(eff, target_index)
-            plan = _plan(trial, self.beam, self.depth)
-            delta = plan.score - base.score
-
-            if dying:
-                after = max(0, trial.total_incoming() - trial.block)
-                if trial.hp > after and (best is None or delta > best[0]):
-                    best = (delta, potion, target_id, "保命")
-                continue
-
-            if plan.score >= 9000:
-                if best is None or delta > best[0]:
-                    best = (delta, potion, target_id, "斩杀")
-                continue
-
             offensive = (eff["damage"] or eff["strength"] or eff["vulnerable"]
                          or eff["weak"] or eff["upgrade_hand"] or eff["duplicate_next"])
-            if offensive and hp_ratio < 0.6 and delta >= POTION_MIN_GAIN:
-                if best is None or delta > best[0]:
-                    best = (delta, potion, target_id, "增伤")
+            # 单体药水尝试所有存活敌人, 其他药水只需评估一次.
+            targets: list[Optional[int]] = (
+                [i for i, enemy in enumerate(sim.enemies) if enemy.alive]
+                if potion.needs_enemy_target else [None]
+            )
+            for target_index in targets:
+                trial = sim.clone()
+                trial.apply_potion(eff, target_index)
+                plan = _plan(trial, self.beam, self.depth)
+                delta = plan.score - base.score
+
+                if plan.hp_left <= 0:
+                    continue
+                if base.hp_left <= 0:
+                    why = "保命"
+                elif plan.won:
+                    why = "斩杀"
+                elif offensive and hp_ratio < 0.6 and delta >= POTION_MIN_GAIN:
+                    why = "增伤"
+                else:
+                    continue
+
+                if best is None or (plan.won, plan.score) > (best[0].won, best[0].score):
+                    target_id = sim.enemies[target_index].entity_id if target_index is not None else None
+                    best = (plan, potion, target_id, why)
 
         if best is None:
             return None
 
-        delta, potion, target_id, why = best
+        plan, potion, target_id, why = best
+        delta = plan.score - base.score
         return Decision(
             action=UsePotion(potion.slot, target_id),
-            reason=f"{why}：{potion.name}（估值+{delta:.0f}，血{sim.hp}/{sim.max_hp}）",
+            reason=f"{why}: {potion.name} (估值+{delta:.0f}, 血{sim.hp}/{sim.max_hp})",
             source=Source.HEURISTIC,
             tool=self.name,
         )
 
 
 def decide_state(raw: dict[str, Any]) -> Decision:
-    """Standalone entry point: a raw state dict in, a decision out.
+    """独立入口: 输入原始状态字典, 输出决策.
 
-    No bridge, no files, no clocks. This is the function a C# port must match
-    bit-for-bit, and the one the offline benchmark calls.
+    不依赖桥接, 文件或时钟. 离线基准调用此函数,
+    后续 C# 移植应与其逐项对齐.
     """
     from ..model import GameState
 

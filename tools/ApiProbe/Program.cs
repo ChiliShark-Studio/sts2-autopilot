@@ -1,13 +1,11 @@
 ﻿using System.Reflection;
 
-// Reflection probe for the Slay the Spire 2 assembly.
+// Slay the Spire 2 程序集的反射探针.
 //
-// The XML docs that ship with the game only cover a fraction of the API, and
-// the numbers we want (card damage/block, enemy intent damage) live behind
-// undocumented members.  Rather than guess, load sts2.dll and print what is
-// actually there.
+// 游戏附带的 XML 文档只覆盖部分 API, 所需的卡牌伤害 / 格挡和敌人意图伤害
+// 位于未公开文档的成员中. 加载 sts2.dll 并打印实际成员, 避免猜测接口.
 //
-// Usage: dotnet run -- <game data dir>
+// 用法: dotnet run -- <game data dir>
 
 var dataDir = args.Length > 0
     ? args[0]
@@ -58,10 +56,10 @@ DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar"), "Dyn
 DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DamageVar"), "DamageVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.RepeatVar"), "RepeatVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.CardsVar"), "CardsVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.PowerVar`1"), "PowerVar");
 DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.BlockVar"), "BlockVar", Interesting);
 
-// AbstractModel is where DynamicVars may actually live.
+// DynamicVars 实际上可能定义在 AbstractModel 中.
 DumpMembers(Find("MegaCrit.Sts2.Core.Models.AbstractModel"), "AbstractModel", Interesting);
 
-// Intent hierarchy is undocumented; enumerate every concrete type.
+// 意图类型层次缺少文档, 因此枚举所有具体类型.
 var intentBase = Find("MegaCrit.Sts2.Core.MonsterMoves.Intents.AbstractIntent");
 if (intentBase is not null)
 {

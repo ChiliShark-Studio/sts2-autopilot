@@ -1,8 +1,7 @@
-"""Arena: play whole fights with the production combat policy, offline.
+"""竞技场: 离线使用真实游戏所用的战斗策略打完整场战斗.
 
-The important property is that there is no second policy: each turn is rendered
-into the bridge's state format and handed to ``combat_search.decide_state``,
-the exact function the live agent calls.
+这里没有第二套策略. 每次将状态渲染为桥接格式,
+交给真实 Agent 同样调用的 ``combat_search.decide_state`` 决策.
 """
 
 from __future__ import annotations
@@ -36,9 +35,9 @@ def run_fight(deck: list[DeckCard], monsters: list[Monster], *, seed: int = 0,
         else:
             stuck = 0
 
-        # Either the action was "end turn", or the policy asked for something
-        # illegal. Both advance the round; the counter stops a policy that
-        # keeps proposing the same unplayable card.
+        # 动作是结束回合, 或策略提出了非法动作时, 都会推进回合.
+        # 计数器用于中止反复提出同一张不可打出卡牌的策略,
+        # 避免无限重试.
         if stuck >= 3:
             break
         fight.end_turn()
@@ -93,7 +92,7 @@ def run_batch(deck: list[DeckCard], monsters_factory: Callable[[], list[Monster]
     policy = policy or decide_state
     out = BatchResult()
     for seed in range(runs):
-        # Fresh monster instances per run: they carry mutable HP/step state.
+        # 每次运行创建新的敌人实例, 避免复用已改变的血量和行动状态.
         out.results.append(run_fight(
             list(deck), monsters_factory(), seed=seed, hp=hp, max_hp=max_hp, policy=policy))
     return out

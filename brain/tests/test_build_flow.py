@@ -1,4 +1,4 @@
-"""Build tool tests: the reward-flow rules that caused the first hang."""
+"""构筑工具测试: 覆盖首次卡住时暴露的奖励流程规则."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class BuildFlowTests(unittest.TestCase):
 
     def test_does_not_reopen_card_reward_after_pick(self):
         tool = BuildFlowTool()
-        tool.decide(request(REWARD_STATE, "card_reward"))  # opens/marks the card flow
+        tool.decide(request(REWARD_STATE, "card_reward"))  # 打开并标记选牌流程
         only_card = {"state_type": "rewards", "player": {"hp": 50, "max_hp": 80},
                      "rewards": {"can_proceed": True, "items": [{"index": 0, "type": "card"}]}}
         decision = tool.decide(request(only_card, "rewards"))
@@ -65,7 +65,7 @@ class BuildFlowTests(unittest.TestCase):
         self.assertIsNone(decision.action)
 
     def test_effect_only_card_is_not_scored_zero(self):
-        # A Rare engine with no damage/block numbers must still beat a blank.
+        # 没有伤害或格挡数值的 Rare 核心牌, 评分仍应高于空白牌.
         from brain.model import Card
 
         engine = Card(name="腐蚀波", cost=1, rarity="Rare", type="Skill")
@@ -78,12 +78,12 @@ class BuildFlowTests(unittest.TestCase):
 
         rare_engine = Card(name="腐蚀波", cost=1, rarity="Rare", type="Skill")
         basic_defend = Card(name="防御", cost=1, block=5, rarity="Basic", type="Skill")
-        # Lower discard_score == safer to throw away.
+        # discard_score 越低, 越适合弃掉.
         self.assertLess(discard_score(basic_defend), discard_score(rare_engine))
 
 
 class EventTests(unittest.TestCase):
-    """真理石板 bleeds max HP in steps; the policy must not walk the ladder."""
+    """真理石板会逐步扣除最大生命, 策略不得一直选择继续."""
 
     def _score(self, option, hp=91, max_hp=91):
         from brain.tools.build_flow import _event_score
@@ -97,7 +97,7 @@ class EventTests(unittest.TestCase):
 
     def test_refuses_cost_above_the_ratio(self):
         option = {"title": "继续解读", "description": "失去24点最大生命。随机升级一张牌。"}
-        self.assertIsNone(self._score(option))  # 24 > 15% of 91
+        self.assertIsNone(self._score(option))  # 24 超过 91 的 15%
 
     def test_refuses_when_hp_would_drop_to_floor(self):
         option = {"title": "抛下一切", "description": "失去45点最大生命。升级你的所有卡牌。"}
@@ -122,7 +122,7 @@ class EventTests(unittest.TestCase):
         tool = BuildFlowTool()
         decision = tool.decide(DecisionRequest(kind=DecisionKind.BUILD,
                                                state=GameState.parse(state), scene="event"))
-        self.assertEqual(decision.action.option, 1)  # leave, never the 45 HP option
+        self.assertEqual(decision.action.option, 1)  # 应选择离开, 避免付出 45 点生命
 
     def test_no_safe_option_and_no_leave_still_exits(self):
         from brain.contracts import DecisionKind, DecisionRequest

@@ -1,4 +1,4 @@
-"""Select agent: owns modal card-picker decisions (discard / exhaust / upgrade)."""
+"""选牌 Agent: 负责弃牌 / 消耗 / 升级等选牌弹窗的决策."""
 
 from __future__ import annotations
 

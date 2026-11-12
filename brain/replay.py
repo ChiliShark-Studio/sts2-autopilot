@@ -1,16 +1,14 @@
-"""Replay journal: every decision, in order, with enough context to re-derive it.
+"""回放日志: 按顺序记录每次决策, 保留重新推导所需的上下文.
 
-The reference project records state, decision, LLM calls and search records
-under ``runs/<seed>/``.  We keep the same idea with less machinery: one JSONL
-line per step holding the *wire* state, the routed request and the decision.
+参考项目在 ``runs/<seed>/`` 中记录状态, 决策, LLM 调用和搜索记录.
+这里采用更简单的方式: 每步写入一条 JSONL, 包含原始协议状态, 路由请求和决策.
 
-That is enough to
-  * replay a run offline against a changed policy,
-  * diff two policies on the same states,
-  * debug one bad decision without re-running the game.
+这些记录用于:
+  * 使用修改后的策略离线重放历史状态.
+  * 在相同状态上比较两种策略.
+  * 不重开游戏即可定位一次错误决策.
 
-The wire state is stored raw (not the typed model) so a C# port can read the
-same file.
+保存原始协议状态而非类型化对象, 使 C# 也能读取同一份日志.
 """
 
 from __future__ import annotations
@@ -57,13 +55,13 @@ class Journal:
 
 
 def replay_states(path: Path) -> Iterator[GameState]:
-    """Yield the states of a recorded run, in order -- feed them to a policy."""
+    """按顺序返回历史对局的状态, 供策略重新决策."""
     for entry in Journal(path):
         yield GameState.parse(entry["state"])
 
 
 def llm_decisions(path: Path) -> Iterator[dict[str, Any]]:
-    """Entries where the model made the call, with its prompt/reply attached."""
+    """筛选由模型作出决策的记录, 包含对应的提示词和回复."""
     for entry in Journal(path):
         decision = entry.get("decision") or {}
         if decision.get("source") == "llm":

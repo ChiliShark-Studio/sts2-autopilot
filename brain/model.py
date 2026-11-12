@@ -1,16 +1,13 @@
-"""Typed domain model, mirroring `spirecomm/spire/` from the StS1 agents.
+"""类型化领域模型, 结构参考一代 Agent 的 `spirecomm/spire/`.
 
-Why this layer exists at all: without it, every policy ends up re-deriving
-"what screen am I on", "which index is this card", "is that intent an attack"
-from raw JSON, and each one gets it slightly differently.  Parsing happens
-once, here; policies only ever see objects.
+统一解析原始 JSON, 避免各策略分别判断当前界面, 卡牌索引和攻击意图,
+造成细微差异. 解析集中在这里完成, 策略使用类型化对象.
 
-Two rules the StS1 projects follow and we keep:
+沿用一代项目的两条约定:
 
-* parsing is total -- unknown fields are ignored, missing fields get defaults.
-  A game patch must not crash the model, it should degrade one field.
-* the raw dict is kept on ``GameState.raw`` as an escape hatch, so a policy
-  that needs something we have not modelled yet is never blocked.
+* 解析始终有结果: 忽略未知字段, 缺失字段使用默认值.
+  游戏补丁最多影响个别字段, 不应使模型崩溃.
+* 在 ``GameState.raw`` 中保留原始字典, 供需要尚未建模字段的策略使用.
 """
 
 from __future__ import annotations
@@ -23,7 +20,7 @@ from .effects import incoming_damage, parse_card
 
 
 class Screen(str, Enum):
-    """The bridge's ``state_type`` values, normalised into one enum."""
+    """将桥接的 ``state_type`` 值统一表示为枚举."""
 
     MENU = "menu"
     MAP = "map"
@@ -89,8 +86,8 @@ class Card:
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
-    # Upgraded numbers, when the bridge provides them. None means "unknown, use
-    # the heuristic in the simulator".
+    # 桥接提供的升级数值. None 表示数值未知,
+    # 模拟器应使用启发式估计.
     damage_up: Optional[int] = None
     block_up: Optional[int] = None
     # 应急按钮: "接下来的 N 回合内无法再从卡牌中获得格挡"
@@ -129,7 +126,7 @@ class Card:
     def needs_target(self) -> bool:
         if self.target_type:
             return self.target_type.lower().endswith("enemy")
-        # Older/partial states may omit target_type; a damaging card is targeted.
+        # 旧版或不完整状态可能缺少 target_type; 此时将伤害牌视为需要目标.
         return self.damage > 0
 
 
@@ -143,7 +140,7 @@ class Intent:
     @classmethod
     def parse(cls, raw: Any) -> "Intent":
         d = _d(raw)
-        # The patched mod emits numbers; older builds only had text.
+        # 带补丁的 Mod 输出数值, 旧版只有文本.
         if d.get("damage") is not None:
             return cls(_s(d.get("type")), _i(d.get("damage")), max(1, _i(d.get("hits"), 1)), _s(d.get("label")))
         from .effects import parse_intent
@@ -176,8 +173,8 @@ class Enemy:
             max_hp=_i(d.get("max_hp"), _i(d.get("hp"))),
             block=_i(d.get("block")),
             intents=tuple(Intent.parse(x) for x in _l(d.get("intents"))),
-            # Key by stable id, not localised name: the sim must keep working
-            # when the game runs in another language.
+            # 使用稳定 id 而非本地化名称作为键,
+            # 使模拟器在游戏切换语言后仍可工作.
             powers={
                 _s(p.get("id") or p.get("name")): _i(p.get("amount"))
                 for p in _l(d.get("status"))
@@ -359,7 +356,7 @@ class RewardItem:
 
 @dataclass(frozen=True)
 class HandSelect:
-    """A modal card picker: discard / exhaust / upgrade / choose-a-card."""
+    """选牌弹窗: 弃牌 / 消耗 / 升级 / 选择卡牌."""
 
     mode: str = ""
     prompt: str = ""
@@ -428,7 +425,7 @@ class GameState:
             raw=d,
         )
 
-    # -- convenience predicates used by the agent -------------------------- #
+    # -- 供 Agent 使用的便捷判断 --
     @property
     def in_combat(self) -> bool:
         return self.screen in (Screen.COMBAT, Screen.ELITE, Screen.BOSS) and self.battle is not None

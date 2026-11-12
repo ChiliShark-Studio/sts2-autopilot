@@ -1,13 +1,12 @@
-"""Ports: the seams that keep the decision layer portable.
+"""接口边界: 保持决策层可移植.
 
-``GamePort`` is what the agent needs from the world (read state, send action).
-``ToolPort`` is what an agent needs from a domain tool.  Both are protocols, so
+``GamePort`` 提供读取状态和发送动作的能力.
+``ToolPort`` 提供 Agent 所需的决策工具接口. 两者均为协议, 因此:
 
-* the live bridge, a recorded replay, and a unit-test fake are interchangeable;
-* a C# implementation of the same shape drops in without touching agents.
+* 实时桥接, 历史回放和测试替身可以通过相同接口接入.
+* C# 可以实现相同形状, 无需改变 Agent 的职责.
 
-The live implementation lives in ``transport.py``; a replay reader is in
-``replay.py``.
+实时实现位于 ``transport.py``, 回放读取逻辑位于 ``replay.py``.
 """
 
 from __future__ import annotations

@@ -1,15 +1,13 @@
-"""The decision contract: the one interface every agent and tool shares.
+"""决策契约: 所有 Agent 和工具共享的接口.
 
-This file is deliberately boring and JSON-shaped, because the end goal is to
-move the whole decision layer into the C# mod.  Anything that lives here must
-be expressible as a plain dictionary that a C# implementation can produce and
-consume without translation:
+这里使用简单的 JSON 形状, 便于将整个决策层移植到 C# Mod.
+所有结构都应能表示为普通字典, 让 C# 实现无需转换即可生成和读取:
 
     DecisionRequest  { kind, scene, state, legal }
     Decision         { action, reason, source }
 
-Keep protocol concerns (HTTP, files, clocks) out of this file.  If a field
-cannot survive ``json.dumps`` it does not belong here.
+本文件不处理 HTTP, 文件或时钟等外部交互.
+字段必须能够通过 ``json.dumps`` 序列化.
 """
 
 from __future__ import annotations
@@ -23,19 +21,19 @@ from .model import GameState
 
 
 class DecisionKind(str, Enum):
-    """Who owns the decision. Mirrors ``router.py`` and the C# switch."""
+    """决策归属, 对应 ``router.py`` 和 C# 的分支判断."""
 
     MAP = "map"
     BUILD = "build"
     COMBAT = "combat"
-    # Modal card pickers (discard / exhaust / upgrade) are their own unit: they
-    # interrupt combat but are not combat decisions, and the card pool is the
-    # hand rather than the reward list.
+    # 选牌弹窗 (弃牌 / 消耗 / 升级) 由独立决策单元处理.
+    # 它们会中断战斗, 但不属于战斗出牌决策,
+    # 候选牌来自手牌, 而非奖励列表.
     SELECT = "select"
 
 
 class Source(str, Enum):
-    """Where a decision came from -- logged, never parsed by the game."""
+    """决策来源, 仅写入日志, 游戏不会解析."""
 
     LLM = "llm"
     SEARCH = "search"
@@ -48,11 +46,11 @@ class Source(str, Enum):
 class DecisionRequest:
     kind: DecisionKind
     state: GameState
-    scene: str = ""  # sub-screen for BUILD: card_reward / shop / event / rest / rewards
+    scene: str = ""  # BUILD 的子界面: card_reward / shop / event / rest / rewards
     legal: tuple[Action, ...] = ()
 
     def to_wire(self) -> dict[str, Any]:
-        """The C#-portable shape. ``state.raw`` is already the wire form."""
+        """可移植到 C# 的数据形状; ``state.raw`` 已是原始协议形状."""
         return {
             "kind": self.kind.value,
             "scene": self.scene,
@@ -67,9 +65,9 @@ class Decision:
     reason: str = ""
     source: Source = Source.NONE
     tool: str = ""
-    # JSON-safe details for the journal: for LLM decisions this carries the
-    # model name, token usage, the prompt and the raw reply, so a replay can
-    # show what the model actually saw.
+    # 可序列化为 JSON 的日志详情. 对于 LLM 决策, 包含
+    # 模型名, token 用量, 提示词和原始回复,
+    # 便于回放时查看模型实际收到的内容.
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -93,7 +91,7 @@ WAIT = Decision(action=None, reason="等待状态稳定", source=Source.NONE, to
 
 @dataclass(frozen=True)
 class DecisionLog:
-    """One entry of the replay journal."""
+    """回放日志中的一条记录."""
 
     step: int
     screen: str

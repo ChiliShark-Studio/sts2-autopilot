@@ -1,4 +1,4 @@
-"""Select tool tests: Silent's Survivor forces a discard mid-combat."""
+"""选牌工具测试: 静默猎手的生存者会在战斗中要求弃牌."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ class SelectToolTests(unittest.TestCase):
                                    ]}}
         decision = SelectTool().decide(request(payload))
         self.assertIsInstance(decision.action, SelectCard)
-        self.assertEqual(decision.action.index, 1)  # never re-click the selected one
+        self.assertEqual(decision.action.index, 1)  # 不能重复点击已选中的卡牌
 
     def test_confirms_when_preview_is_showing(self):
         payload = {"state_type": "card_select", "player": {"hp": 50, "max_hp": 70},

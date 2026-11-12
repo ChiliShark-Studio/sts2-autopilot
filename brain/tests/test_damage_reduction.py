@@ -1,10 +1,10 @@
-"""Damage-reduction powers: the floor-17 boss review found these missing.
+"""减伤状态测试: 第 17 层 Boss 复盘发现这些效果尚未建模.
 
-滑溜 (SLIPPERY_POWER): the next N times the enemy would lose HP, it loses 1.
-无实体 (INTANGIBLE_POWER): every hit is capped at 1.
+滑溜 (SLIPPERY_POWER): 接下来 N 次失去生命时, 每次只失去 1 点.
+无实体 (INTANGIBLE_POWER): 每次伤害最多造成 1 点生命损失.
 
-Both cap **per hit**, so multi-hit attacks burn 滑溜 stacks faster -- the sim
-must model that, otherwise every "I deal 29 this turn" estimate is fiction.
+减伤按每次命中计算, 多段攻击会更快消耗滑溜层数.
+模拟器必须体现这一点, 否则本回合伤害估计会失真.
 """
 
 from __future__ import annotations
@@ -36,11 +36,11 @@ class SlipperyTests(unittest.TestCase):
     def test_single_hit_is_capped_and_consumes_a_stack(self):
         s = sim(enemy_hp=20, powers=[{"id": "SLIPPERY_POWER", "name": "滑溜", "amount": 8}])
         s.play(0, 0)
-        self.assertEqual(s.enemies[0].hp, 19)   # 6 damage -> 1
+        self.assertEqual(s.enemies[0].hp, 19)   # 6 点伤害降为 1 点
         self.assertEqual(s.enemies[0].slippery, 7)
 
     def test_multi_hit_burns_stacks_then_deals_full_damage(self):
-        # 3 hits of 3 damage vs 2 stacks: 1 + 1 + 3 = 5.
+        # 每段 3 点伤害, 共 3 段, 面对 2 层滑溜: 1 + 1 + 3 = 5.
         s = sim(enemy_hp=20, damage=3, hits=3,
                 powers=[{"id": "SLIPPERY_POWER", "name": "滑溜", "amount": 2}])
         s.play(0, 0)
@@ -48,7 +48,7 @@ class SlipperyTests(unittest.TestCase):
         self.assertEqual(s.enemies[0].slippery, 0)
 
     def test_name_only_status_still_works(self):
-        """Older logs carry localised names without ids."""
+        """旧日志仅包含本地化名称, 不含 id."""
         s = sim(enemy_hp=20, powers=[{"name": "滑溜", "amount": 4}])
         s.play(0, 0)
         self.assertEqual(s.enemies[0].hp, 19)
@@ -65,7 +65,7 @@ class IntangibleTests(unittest.TestCase):
         s = sim(enemy_hp=20, damage=3, hits=3,
                 powers=[{"id": "INTANGIBLE_POWER", "name": "无实体", "amount": 1}])
         s.play(0, 0)
-        self.assertEqual(s.enemies[0].hp, 17)  # 3 hits x 1
+        self.assertEqual(s.enemies[0].hp, 17)  # 3 次命中, 每次伤害为 1
 
 
 if __name__ == "__main__":

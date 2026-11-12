@@ -1,8 +1,8 @@
-"""A fake OpenAI-compatible endpoint, for testing the LLM path without a key.
+"""模拟 OpenAI 兼容接口, 无需密钥即可测试 LLM 调用链.
 
-    python tools/mock_llm.py 18777 1     # always answers {"choice": 1, ...}
+    python tools/mock_llm.py 18777 1     # 始终返回 {"choice": 1, ...}
 
-Then:
+然后配置并调用:
     $env:OPENAI_BASE_URL = "http://127.0.0.1:18777/v1"
     $env:LLM_API_KEY     = "mock"
     python -m brain.run_map --explain

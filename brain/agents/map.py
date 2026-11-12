@@ -1,4 +1,4 @@
-"""Map agent: route decisions, delegated to the map tool."""
+"""地图 Agent: 将路线决策交给地图工具."""
 
 from __future__ import annotations
 

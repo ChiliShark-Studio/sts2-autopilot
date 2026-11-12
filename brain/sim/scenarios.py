@@ -1,8 +1,7 @@
-"""Starter decks and simple encounters for the standalone arena.
+"""独立竞技场使用的初始卡组和简单遭遇.
 
-These are deliberately small and honest: they are *not* the real game's
-numbers, they are a fixed yardstick so two policy versions can be compared on
-the same fights.  Add encounters as the policy improves.
+这些场景刻意保持简单, 数值不代表真实游戏.
+它们用于让两个策略版本在相同战斗中比较, 后续可随策略完善增加场景.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ def starter(character: str = "silent") -> list[DeckCard]:
     character = character.lower()
     if character in ("ironclad", "铁甲战士"):
         return [STRIKE] * 5 + [DEFEND] * 4 + [BASH]
-    # silent
+    # 静默猎手
     return [STRIKE] * 5 + [DEFEND] * 5 + [NEUTRALIZE, SURVIVOR]
 
 
@@ -37,7 +36,7 @@ def _slimes() -> list[Monster]:
 
 
 def _jaw_worm() -> list[Monster]:
-    # Alternates a big hit and a buff, like the real early elite-lite fight.
+    # 交替执行重击和强化, 用于近似前期较强敌人的战斗节奏.
     return [Monster("颚虫", hp=44, max_hp=44, script=[Intent("attack", 11), Intent("buff", strength=3)])]
 
 

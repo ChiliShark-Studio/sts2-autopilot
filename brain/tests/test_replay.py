@@ -1,4 +1,4 @@
-"""Replay journal tests: write, read back, summarize."""
+"""回放日志测试: 写入, 读回和汇总."""
 
 from __future__ import annotations
 

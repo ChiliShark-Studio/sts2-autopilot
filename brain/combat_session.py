@@ -1,9 +1,8 @@
-"""Fight exactly one combat in the live game -- no routing, no LLM, no rewards.
+"""只接管真实游戏中的一场战斗, 不涉及路线选择, LLM 或奖励.
 
-Why a separate session instead of ``GameAgent.run``: sometimes you only want the
-combat algorithm to take over the current fight while you handle the map and
-rewards yourself.  That is a different job from "play the whole run", and it
-should not drag the map policy (or an LLM client) into the process.
+单独提供会话而不使用 ``GameAgent.run`` 的原因是:
+有时只需要算法处理当前战斗, 地图和奖励由用户自己操作.
+这与整局自动游玩不同, 无需把地图策略或 LLM 客户端引入流程.
 """
 
 from __future__ import annotations
@@ -48,7 +47,7 @@ class CombatSummary:
 
 def fight_current(port: GamePort, agent: GameAgent, *, max_steps: int = 300,
                   settle: float = 0.5, verbose: bool = True) -> CombatSummary:
-    """Play until the combat is over, then return. Leaves the game on the reward screen."""
+    """持续操作直到战斗结束后返回, 将游戏留在奖励界面."""
     state = port.state()
     if state.screen not in COMBAT_SCREENS:
         raise NotInCombat(f"当前不在战斗中（state_type={state.screen.value}）")
@@ -87,7 +86,7 @@ def fight_current(port: GamePort, agent: GameAgent, *, max_steps: int = 300,
         try:
             port.act(decision.action, state)
         except BridgeError as exc:
-            # Screen closed between read and send: re-read instead of aborting.
+            # 读取到发送之间界面已关闭, 重新读取而不中断.
             if any(token in str(exc) for token in ("not open", "not available", "No card")):
                 time.sleep(0.3)
                 continue

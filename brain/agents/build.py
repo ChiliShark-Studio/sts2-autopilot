@@ -1,4 +1,4 @@
-"""Build agent: deck construction, rewards, and the non-combat screens."""
+"""构筑 Agent: 负责卡组构筑, 奖励和非战斗界面."""
 
 from __future__ import annotations
 

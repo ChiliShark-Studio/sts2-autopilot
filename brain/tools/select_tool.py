@@ -1,11 +1,10 @@
-"""Card-picker tool: discard / exhaust / upgrade a card from a modal screen.
+"""选牌工具: 处理弹窗中的弃牌 / 消耗 / 升级.
 
-Silent's starter deck already forces this: ``生存者`` grants block and then asks
-you to discard a card.  Without a policy for that screen the agent simply stops
-mid-combat, which is exactly what happened in the first live run.
+静默猎手初始卡组的生存者会先获得格挡, 再要求弃牌.
+缺少选牌策略时, Agent 会停在战斗中途, 首次真实对局就遇到过此问题.
 
-The prompt text is the only signal the bridge gives about intent, so the tool
-reads it: upgrade wants the *best* card, discard/exhaust wants the *worst*.
+桥接仅通过提示文本表达选牌意图, 因此读取提示进行判断:
+升级选择高价值牌, 弃牌或消耗选择低价值牌.
 """
 
 from __future__ import annotations
@@ -23,14 +22,14 @@ class SelectTool:
     name = "select_tool"
 
     def _in_combat_picker(self, state) -> bool:
-        # ``combat_select_card`` only applies to the in-combat hand picker;
-        # grid pickers (events, transform shrines) use the plain ``select_card``.
+        # ``combat_select_card`` 只适用于战斗内手牌选择;
+        # 事件或变化祭坛等网格选牌使用 ``select_card``.
         from ..model import Screen
 
         return state.screen is Screen.HAND_SELECT and state.battle is not None
 
     def _select(self, state, index: int):
-        """In combat the picker lives in NPlayerHand and needs its own action."""
+        """战斗内选牌由 NPlayerHand 处理, 需要使用独立动作."""
         from ..actions import CombatSelectCard
 
         return CombatSelectCard(index) if self._in_combat_picker(state) else SelectCard(index)
@@ -46,13 +45,13 @@ class SelectTool:
         if picker is None or not picker.cards:
             return WAIT
 
-        # Grid pickers are toggles: clicking an already-selected card DESELECTS
-        # it. Re-picking the same card is how the first version deadlocked, so
-        # only ever click cards that are not selected yet.
+        # 网格选牌是切换操作: 再次点击已选中的牌会取消选择.
+        # 初版曾因反复点击同一张牌而卡住,
+        # 因此只点击尚未选中的卡牌.
         unselected = [c for c in picker.cards if not c.selected]
 
         if picker.preview_showing or picker.can_confirm:
-            # Selection accepted; finish through the confirm button.
+            # 选择已被接受, 通过确认按钮完成操作.
             return Decision(action=self._confirm(state), reason="确认选择",
                             source=Source.SCRIPT, tool=self.name)
 
@@ -72,5 +71,5 @@ class SelectTool:
                         source=Source.HEURISTIC, tool=self.name)
 
 
-def score(card: Card) -> float:  # re-exported for tests
+def score(card: Card) -> float:  # 重新导出供测试使用
     return card_score(card)

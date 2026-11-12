@@ -1,15 +1,14 @@
-"""OpenAI-compatible chat client, standard library only.
+"""仅使用标准库的 OpenAI 兼容聊天客户端.
 
-Only one shape is needed: "give me a JSON object".  Everything else (retries,
-timeouts, malformed output) degrades to ``None`` so the caller can fall back to
-a heuristic instead of stalling a run.
+只支持返回 JSON 对象的调用方式. 重试失败, 超时或输出格式错误时返回 ``None``,
+让调用方退回启发式策略, 避免阻塞整局游戏.
 
-Configuration comes from the environment so no key ever lands in the repo:
+配置从环境变量读取, 避免将密钥写入仓库:
 
     DEEPSEEK_API_KEY   -> https://api.deepseek.com/v1, deepseek-chat
     OPENAI_API_KEY     -> https://api.openai.com/v1, gpt-4o-mini
-    OPENAI_BASE_URL    -> override the endpoint
-    LLM_MODEL          -> override the model name
+    OPENAI_BASE_URL    -> 覆盖接口地址
+    LLM_MODEL          -> 覆盖模型名称
 """
 
 from __future__ import annotations
@@ -42,11 +41,10 @@ class LLMConfig:
 
 
 def _load_env_file(path: "os.PathLike[str] | str") -> None:
-    """Load simple KEY=VALUE lines into os.environ if not already set.
+    """将简单的 KEY=VALUE 配置加载到 os.environ, 不覆盖已存在的变量.
 
-    Used for ``brain/.env`` (git-ignored) so the key never has to appear on a
-    command line.  Deliberately tiny: no quotes, no interpolation, no exports
-    beyond an optional leading ``export``.
+    用于读取已被 Git 忽略的 ``brain/.env``, 避免在命令行中出现密钥.
+    实现刻意保持简单: 不处理引号或插值, 仅支持可选的前导 ``export``.
     """
     try:
         with open(path, encoding="utf-8") as fh:
@@ -66,7 +64,7 @@ def _load_env_file(path: "os.PathLike[str] | str") -> None:
 
 
 def config_from_env() -> Optional[LLMConfig]:
-    """Build a config, or None when no key is configured."""
+    """构建配置, 未配置密钥时返回 None."""
     _load_env_file(os.path.join(os.path.dirname(__file__), ".env"))
 
     if key := os.environ.get("DEEPSEEK_API_KEY"):
@@ -94,7 +92,7 @@ class LLMClient:
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
         self.last_error: Optional[str] = None
-        # Metadata of the most recent successful call, for the journal.
+        # 最近一次成功调用的元数据, 用于写入日志.
         self.last_meta: dict[str, Any] = {}
 
     @classmethod
@@ -103,7 +101,7 @@ class LLMClient:
         return cls(cfg) if cfg else None
 
     def json_chat(self, system: str, user: str) -> Optional[dict[str, Any]]:
-        """Return a parsed JSON object, or None on any failure."""
+        """返回解析后的 JSON 对象, 任何失败均返回 None."""
         payload = {
             "model": self.config.model,
             "messages": [
@@ -156,7 +154,7 @@ class LLMClient:
 
 
 def make_mock_client(reply: dict[str, Any]) -> LLMClient:
-    """A client that always answers with ``reply`` -- used by tests."""
+    """构建始终返回 ``reply`` 的客户端, 供测试使用."""
     client = LLMClient(LLMConfig(base_url="http://mock", model="mock", api_key="mock"))
     client.json_chat = lambda system, user: reply  # type: ignore[method-assign]
     return client

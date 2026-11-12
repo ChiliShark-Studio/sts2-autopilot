@@ -1,4 +1,4 @@
-"""Standalone fight engine + arena tests."""
+"""独立战斗引擎和竞技场测试."""
 
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ class EngineTests(unittest.TestCase):
     def test_deck_reshuffles_when_empty(self):
         fight = Fight(deck(n_strike=3, n_defend=0), [Monster("木桩", 99, 99)], seed=4)
         fight.start_turn()
-        self.assertEqual(len(fight.hand), 3)  # only 3 cards exist
+        self.assertEqual(len(fight.hand), 3)  # 只有 3 张卡牌
         fight.end_turn()
         fight.start_turn()
-        self.assertEqual(len(fight.hand), 3)  # drawn again from the reshuffled discard
+        self.assertEqual(len(fight.hand), 3)  # 弃牌堆重新洗牌后再次抽到
 
     def test_same_seed_same_result(self):
         a = arena.run_fight(deck(), scenarios.encounter("nibbit"), seed=7)
@@ -56,7 +56,7 @@ class ArenaTests(unittest.TestCase):
 
     def test_struggles_against_the_big_one(self):
         batch = arena.run_batch(scenarios.starter("silent"), lambda: scenarios.encounter("lagavulin"), runs=5)
-        # Not a hard assertion on skill, just that the arena distinguishes fights.
+        # 不硬性断言策略水平, 只确认竞技场能区分不同战斗.
         self.assertLessEqual(batch.win_rate, 0.8)
 
     def test_summary_shape(self):

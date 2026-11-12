@@ -1,4 +1,4 @@
-"""Tools: evidence-backed decision implementations behind ``ToolPort``."""
+"""工具层: 在 ``ToolPort`` 接口后提供有依据的决策实现."""
 
 from .build_flow import BuildFlowTool
 from .combat_search import CombatSearchTool

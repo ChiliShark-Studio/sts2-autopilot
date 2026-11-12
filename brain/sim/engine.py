@@ -1,19 +1,16 @@
-"""A standalone combat engine: draw, play, resolve, repeat.
+"""独立战斗引擎: 抽牌, 出牌, 结算, 循环执行.
 
-Why this exists: tuning the combat policy against the live game is slow (one
-fight per minute, and a death costs a whole run).  This module plays a fight
-locally in milliseconds, so parameters can be compared over hundreds of runs.
+真实游戏调参较慢, 每场战斗需要一定时间, 死亡还要重新开局.
+本模块在本地快速模拟战斗, 便于在大量固定场景中比较参数.
 
-It deliberately reuses the *same* decision function as the live agent: every
-turn the engine renders itself into the bridge's state format, calls
-``combat_search.decide_state``, and applies whatever comes back.  If the live
-bot and the arena disagree, that is a bug in one of them -- there is no second
-policy hidden here.
+复用真实游戏所用的决策函数: 每次将模拟状态渲染为桥接格式,
+调用 ``combat_search.decide_state``, 再应用返回的动作.
+真实游戏和竞技场之间没有隐藏的第二套策略, 行为差异需要从实现中排查.
 
-Known simplifications (documented, not accidental):
-  * card text beyond damage/block/draw/energy/vulnerable/weak is ignored;
-  * enemy scripts are fixed cycles, not the game's move machine;
-  * no relics, no potions, no ascension.
+已知的简化规则:
+  * 只处理伤害 / 格挡 / 抽牌 / 能量 / 易伤 / 虚弱等卡牌效果.
+  * 敌人按固定脚本循环行动, 不复现游戏的完整行动状态机.
+  * 不包含遗物, 药水或进阶难度.
 """
 
 from __future__ import annotations
@@ -27,7 +24,7 @@ from ..model import Card
 
 @dataclass
 class Intent:
-    type: str = "attack"  # attack | defend | buff
+    type: str = "attack"  # 意图类型: attack | defend | buff
     damage: int = 0
     hits: int = 1
     block: int = 0
@@ -56,7 +53,7 @@ class Monster:
 
 @dataclass
 class DeckCard:
-    """A card template in the deck (no hand index; that is assigned on draw)."""
+    """卡组中的卡牌模板, 手牌索引在抽到时分配."""
 
     name: str
     cost: int = 1
@@ -118,7 +115,7 @@ class Fight:
         self.cards_played = 0
         self.damage_taken = 0
 
-    # -- pile handling ----------------------------------------------------- #
+    # -- 牌堆处理 --
     def _draw(self, count: int) -> None:
         for _ in range(count):
             if len(self.hand) >= 10:
@@ -135,7 +132,7 @@ class Fight:
         self.energy = self.max_energy
         self._draw(self.draw_per_turn)
 
-    # -- actions ----------------------------------------------------------- #
+    # -- 动作处理 --
     def play(self, hand_index: int, target: Optional[str] = None) -> bool:
         if hand_index < 0 or hand_index >= len(self.hand):
             return False
@@ -209,13 +206,13 @@ class Fight:
             elif intent.type == "buff":
                 monster.strength += intent.strength
 
-            # Debuffs tick down at end of the enemy's action.
+            # 负面状态在敌人行动结束时减少持续回合.
             if monster.vulnerable:
                 monster.vulnerable -= 1
             if monster.weak:
                 monster.weak -= 1
 
-    # -- queries ----------------------------------------------------------- #
+    # -- 状态查询 --
     @property
     def over(self) -> bool:
         return self.hp <= 0 or not any(m.alive for m in self.monsters)
@@ -224,9 +221,9 @@ class Fight:
     def won(self) -> bool:
         return self.hp > 0 and not any(m.alive for m in self.monsters)
 
-    # -- bridge-format rendering ------------------------------------------- #
+    # -- 桥接格式转换 --
     def to_state(self) -> dict[str, Any]:
-        """Render into the exact shape ``/api/v1/singleplayer`` returns."""
+        """将模拟状态渲染为 ``/api/v1/singleplayer`` 返回的数据形状."""
         hand = []
         for i, card in enumerate(self.hand):
             hand.append({

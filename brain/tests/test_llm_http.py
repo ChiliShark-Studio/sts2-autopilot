@@ -1,7 +1,7 @@
-"""End-to-end test of the LLM transport against a local fake server.
+"""使用本地模拟服务对 LLM 传输层进行端到端测试.
 
-No key, no network: this proves the request shape, the JSON-mode parsing and
-the failure path, which are the parts that break silently in production.
+无需密钥或外部网络, 验证请求形状, JSON 模式解析和失败路径.
+这些环节在实际运行中容易静默失败.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def log_message(self, *args) -> None:  # silence test output
+    def log_message(self, *args) -> None:  # 抑制测试日志输出
         pass
 
 

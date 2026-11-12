@@ -1,10 +1,7 @@
-"""Map tool: LLM ranks the routes, a readable heuristic is the fallback.
+"""地图工具: 使用 LLM 排序路线, 启发式作为兜底.
 
-This is the one place in the project where a model is genuinely the right tool:
-route value depends on deck strength, HP, relics, gold and the next two floors
-at once, and no fixed score captures that.  Everything the model returns is
-validated against the advertised options first -- a hallucinated index is the
-most likely failure mode and must never reach the game.
+路线价值同时依赖卡组强度, 血量, 遗物, 金币和后续两层, 固定评分难以完整表达.
+模型输出必须经过合法选项校验, 防止不存在的索引传入游戏.
 """
 
 from __future__ import annotations
@@ -96,7 +93,7 @@ class MapRouterTool:
     def decide(self, request: DecisionRequest) -> Decision:
         state = request.state
         if state.map is None or not state.map.options:
-            # Map is mid-transition; the options reappear in a frame or two.
+            # 地图正在切换, 选项会在一两帧后重新出现.
             return WAIT
 
         valid = {o.index for o in state.map.options}

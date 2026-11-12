@@ -1,15 +1,13 @@
-"""Typed actions, mirroring ``spirecomm/communication/action.py``.
+"""类型化动作, 结构参考 ``spirecomm/communication/action.py``.
 
-An action knows three things the old dict payloads did not:
+每个动作提供原始字典载荷不具备的三项能力:
 
-* how to render itself onto the bridge protocol (``to_payload``);
-* whether it is legal in the current state (``check``), so a stale index is
-  caught before it is sent instead of coming back as a confusing server error;
-* how to describe itself in a log line.
+* 使用 ``to_payload`` 转换为桥接协议载荷.
+* 使用 ``check`` 检查当前状态下是否合法, 提前发现过期索引, 避免服务端返回难以理解的错误.
+* 生成可用于日志的动作描述.
 
-Subclasses set their own ``__init__`` rather than relying on dataclass field
-order: the base class already has a defaulted ``kind`` field, and mixing
-required fields after it is a dataclass error.
+子类自行定义 ``__init__``, 不依赖 dataclass 字段顺序:
+基类的 ``kind`` 已有默认值, 在其后混入必填字段会导致 dataclass 报错.
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ from .model import Card, GameState
 
 
 class ActionError(ValueError):
-    """Raised when an action is not legal in the given state."""
+    """动作在给定状态下不合法时抛出的异常."""
 
 
 @dataclass(frozen=True)
@@ -32,7 +30,7 @@ class Action:
         raise NotImplementedError
 
     def check(self, state: GameState) -> None:
-        """Raise ActionError if the action cannot be executed now."""
+        """动作当前无法执行时抛出 ActionError."""
 
     def describe(self) -> str:
         return self.kind
@@ -152,7 +150,7 @@ class SelectCardReward(Action):
             raise ActionError(f"card reward {self.index} not in {sorted(valid)}")
 
     def to_payload(self) -> dict[str, Any]:
-        # The bridge names this one 'card_index' (unlike claim_reward's 'index').
+        # 桥接在这里使用 'card_index', 不同于 claim_reward 的 'index'.
         return {"action": "select_card_reward", "card_index": self.index}
 
     def describe(self) -> str:
@@ -198,7 +196,7 @@ class ChooseEventOption(Action):
 
 @dataclass(frozen=True)
 class SelectCard(Action):
-    """Pick a card on a modal grid/hand selection screen (discard, exhaust...)."""
+    """在网格或手牌选择弹窗中选牌, 用于弃牌, 消耗等操作."""
 
     index: int = 0
 
@@ -222,11 +220,10 @@ class SelectCard(Action):
 
 @dataclass(frozen=True)
 class CombatSelectCard(Action):
-    """Hand selection *during combat* uses a different bridge action.
+    """战斗内的手牌选择使用独立的桥接动作.
 
-    ``select_card`` targets the grid overlay; in-combat picks (Survivor's
-    discard, exhaust-on-play) go through ``NPlayerHand`` and need
-    ``combat_select_card`` with a ``card_index``.
+    ``select_card`` 用于网格弹窗; 战斗内选牌 (生存者弃牌, 出牌时消耗等)
+    通过 ``NPlayerHand`` 处理, 需要使用携带 ``card_index`` 的 ``combat_select_card``.
     """
 
     index: int = 0

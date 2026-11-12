@@ -1,4 +1,4 @@
-"""Agents: one decision owner per unit (map / build / combat / select) + loop."""
+"""Agent 层: 地图 / 构筑 / 战斗 / 选牌各有独立决策单元, 另有主循环."""
 
 from .build import BuildAgent
 from .combat import CombatAgent

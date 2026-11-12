@@ -1,4 +1,4 @@
-"""Map tool tests: valid choice used, anything else falls back."""
+"""地图工具测试: 采用合法选择, 其他情况退回启发式."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ class MapToolTests(unittest.TestCase):
         tool = MapRouterTool(make_mock_client({"choice": 99, "reason": "瞎选"}))
         decision = tool.decide(request())
         self.assertIs(decision.source, Source.HEURISTIC)
-        self.assertEqual(decision.action.option, 2)  # low HP -> rest site
+        self.assertEqual(decision.action.option, 2)  # 低血量时选择篝火
 
     def test_no_client_is_heuristic(self):
         decision = MapRouterTool(None).decide(request())

@@ -1,4 +1,4 @@
-"""Bridge transport: the only place that speaks HTTP and the mod's protocol."""
+"""桥接传输层: 集中处理 HTTP 和 Mod 协议."""
 
 from __future__ import annotations
 
@@ -26,11 +26,10 @@ class Bridge:
         return GameState.parse(self._get("/api/v1/singleplayer"))
 
     def act(self, action: Action, state: Optional[GameState] = None) -> dict[str, Any]:
-        """Validate against the current state, then send.
+        """先校验当前状态, 再发送动作.
 
-        Validation is done here rather than in the policy so that *every*
-        caller -- agent, tests, a REPL -- gets the same protection against
-        stale indices.
+        在传输层而非策略中校验, 使 Agent, 测试和 REPL 等所有调用方
+        都能在发送前发现过期索引.
         """
         current = state or self.state()
         action.check(current)
@@ -39,7 +38,7 @@ class Bridge:
             raise BridgeError(f"{action.describe()} rejected: {reply.get('error')}")
         return reply
 
-    # -- low level --------------------------------------------------------- #
+    # -- 底层传输 --
     def _get(self, path: str) -> dict[str, Any]:
         req = urllib.request.Request(self.base + path, method="GET")
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:

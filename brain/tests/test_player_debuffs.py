@@ -1,4 +1,4 @@
-"""Player-side debuffs: 不可格挡 / 虚弱 / 缩小, and 应急按钮's downside."""
+"""玩家负面状态测试: 不可格挡 / 虚弱 / 缩小, 以及应急按钮的代价."""
 
 from __future__ import annotations
 

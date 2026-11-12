@@ -1,14 +1,14 @@
-"""命令行入口：把 `python -m brain.cli xxx` 的参数分发到对应的处理函数。
+"""命令行入口: 把 `python -m brain.cli xxx` 的参数分发到对应的处理函数.
 
     python -m brain.cli run [--steps N] [--offline]   整局自动
-    python -m brain.cli dry                          只决策一次，不发动作
+    python -m brain.cli dry                          只决策一次, 不发动作
     python -m brain.cli replay FILE                  汇总一局录像
     python -m brain.cli combat --from FILE           战斗算法独立跑
     python -m brain.cli fight --runs N               离线打完整场战斗
     python -m brain.cli fight-live                   接管游戏里当前这场战斗
 
-这里只做"读参数、选函数、打印结果"，不含任何战斗或路线逻辑。
-真正的算法在 brain/tools/combat_search.py，战斗规则在 brain/sim/engine.py。
+这里只做"读参数, 选函数, 打印结果", 不含任何战斗或路线逻辑.
+真正的算法在 brain/tools/combat_search.py, 战斗规则在 brain/sim/engine.py.
 """
 
 from __future__ import annotations
@@ -25,13 +25,13 @@ from .transport import Bridge, BridgeError
 
 
 def _print_decision(step: int, decision) -> None:
-    """每走一步打印一行：序号、动作、来源、理由。"""
+    """每走一步打印一行: 序号, 动作, 来源, 理由."""
     action = decision.action.describe() if decision.action else "（等待）"
     print(f"[{step:03d}] {action} | {decision.source.value}/{decision.tool} | {decision.reason}")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """整局自动跑：地图、战斗、奖励、选牌都由 agent 自己决定。"""
+    """整局自动跑: 地图, 战斗, 奖励, 选牌都由 agent 自己决定."""
     agent = build_agent(args.base, offline=args.offline, journal_dir=Path("logs"),
                         stop_after_run=args.one_run)
     try:
@@ -39,16 +39,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     except (UnsupportedScreen, BridgeError) as exc:
         print(f"stopped: {exc}", file=sys.stderr)
         return 7
-    # outcome 可能是 game_over / unsupported / max_steps / stuck 等，都算正常结束
+    # outcome 可能是 game_over / unsupported / max_steps / stuck 等, 都算正常结束
     print(f"outcome: {outcome}")
     return 0
 
 
 def cmd_dry(args: argparse.Namespace) -> int:
-    """只算一次决策并打印，不发给游戏。用于调试策略。"""
+    """只算一次决策并打印, 不发给游戏.用于调试策略."""
     agent = build_agent(args.base, offline=args.offline)
 
-    # --from 给文件时读历史状态；否则读游戏当前状态
+    # --from 给文件时读历史状态; 否则读游戏当前状态
     if args.from_file:
         from .model import GameState
 
@@ -68,7 +68,7 @@ def cmd_dry(args: argparse.Namespace) -> int:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    """汇总一份录像：每步落在哪个界面、决策来自哪个工具。"""
+    """汇总一份录像: 每步落在哪个界面, 决策来自哪个工具."""
     path = Path(args.file)
     if not path.exists():
         print(f"no such run: {path}", file=sys.stderr)
@@ -92,9 +92,9 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
 
 def _combat_benchmark(states: list[dict], *, verbose: bool, limit: int) -> int:
-    """战斗算法的批量基准：输入一串状态，输出决策分布和耗时。
+    """战斗算法的批量基准: 输入一串状态, 输出决策分布和耗时.
 
-    不连游戏、不调 LLM，纯本地计算。
+    不连游戏, 不调 LLM, 纯本地计算.
     """
     import time
 
@@ -115,7 +115,7 @@ def _combat_benchmark(states: list[dict], *, verbose: bool, limit: int) -> int:
         timings.append((time.perf_counter() - started) * 1000)  # 毫秒
 
         if decision.action is None:
-            waits += 1  # 还没轮到我方，或动画未结算
+            waits += 1  # 还没轮到我方, 或动画未结算
             continue
 
         name = decision.action.kind
@@ -123,7 +123,7 @@ def _combat_benchmark(states: list[dict], *, verbose: bool, limit: int) -> int:
         if verbose:
             print(f"{decision.action.describe():24} | {decision.reason}")
 
-    # 排序后取中位数和 p95，p95 反映"最慢的那几次"有多慢
+    # 排序后取中位数和 p95, p95 反映"最慢的那几次"有多慢
     timings.sort()
     mid = timings[len(timings) // 2]
     p95 = timings[int(len(timings) * 0.95) - 1] if len(timings) > 1 else mid
@@ -141,7 +141,7 @@ def _combat_benchmark(states: list[dict], *, verbose: bool, limit: int) -> int:
 
 
 def cmd_combat(args: argparse.Namespace) -> int:
-    """战斗算法独立跑：单个状态，或一整份录像里的所有战斗状态。"""
+    """战斗算法独立跑: 单个状态, 或一整份录像里的所有战斗状态."""
     from .replay import Journal
 
     if args.from_file:
@@ -150,7 +150,7 @@ def cmd_combat(args: argparse.Namespace) -> int:
 
     if args.journal:
         entries = list(Journal(Path(args.journal)))
-        # 只取 state_type 为 monster 的条目（真正的战斗状态）
+        # 只取 state_type 为 monster 的条目(真正的战斗状态)
         states = [e["state"] for e in entries
                   if (e.get("state") or {}).get("state_type") == "monster"]
         return _combat_benchmark(states, verbose=args.verbose, limit=args.limit)
@@ -160,7 +160,7 @@ def cmd_combat(args: argparse.Namespace) -> int:
 
 
 def cmd_fight(args: argparse.Namespace) -> int:
-    """离线打完整场战斗：本地模拟器 + 同一个战斗算法，不连游戏。"""
+    """离线打完整场战斗: 本地模拟器 + 同一个战斗算法, 不连游戏."""
     from .sim import arena, scenarios
 
     deck = scenarios.starter(args.deck)
@@ -169,7 +169,7 @@ def cmd_fight(args: argparse.Namespace) -> int:
         runs=args.runs, hp=args.hp, max_hp=args.hp,
     )
 
-    # --verbose 时逐场打印，否则只给汇总
+    # --verbose 时逐场打印, 否则只给汇总
     if args.verbose:
         for result in batch.results:
             flag = "胜" if result.won else "负"
@@ -182,10 +182,10 @@ def cmd_fight(args: argparse.Namespace) -> int:
 
 
 def cmd_fight_live(args: argparse.Namespace) -> int:
-    """接管游戏里当前这一场战斗，打完就停；不碰地图和奖励。"""
+    """接管游戏里当前这一场战斗, 打完就停; 不碰地图和奖励."""
     from .combat_session import NotInCombat, fight_current
 
-    # offline=True：根本不创建 LLM 客户端，确保战斗过程零 LLM
+    # offline=True: 根本不创建 LLM 客户端, 确保战斗过程零 LLM
     agent = build_agent(args.base, offline=True, journal_dir=Path("logs"))
     try:
         summary = fight_current(agent.port, agent, max_steps=args.steps,
@@ -199,7 +199,7 @@ def cmd_fight_live(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """注册所有子命令。每个子命令的 func 就是上面那些 cmd_* 函数。"""
+    """注册所有子命令.每个子命令的 func 就是上面那些 cmd_* 函数."""
     parser = argparse.ArgumentParser(prog="brain.cli")
     parser.add_argument("--base", default=DEFAULT_BASE, help="桥接地址，默认 127.0.0.1:15526")
     sub = parser.add_subparsers(dest="cmd", required=True)

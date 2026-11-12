@@ -1,14 +1,14 @@
-"""Decision layer for sts2-autopilot.
+"""sts2-autopilot 的决策层.
 
-Layering (mirrors AttemorySystem/spire-agent, adapted to an HTTP bridge):
+分层参考 AttemorySystem/spire-agent, 并适配 HTTP 桥接:
 
-    contracts  request/decision, JSON-shaped so a C# port can mirror it
-    ports      GamePort / ToolPort -- the seams
-    router     screen -> decision owner
-    agents     map / build / combat owners + the game loop
-    tools      map_router (LLM), combat_search (beam), build_flow (rewards)
-    transport  live HTTP bridge
-    replay     JSONL journal, replayable offline
+    contracts  请求和决策的数据结构, 使用便于移植到 C# 的 JSON 形状
+    ports      GamePort / ToolPort 接口边界
+    router     界面到决策单元的路由
+    agents     地图 / 构筑 / 战斗决策单元及游戏循环
+    tools      map_router (LLM), combat_search (束搜索), build_flow (奖励)
+    transport  实时 HTTP 桥接
+    replay     支持离线回放的 JSONL 日志
 """
 
 __all__ = [

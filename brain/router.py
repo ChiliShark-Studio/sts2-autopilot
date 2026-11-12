@@ -1,4 +1,4 @@
-"""Screen -> decision owner. The only place that knows the full screen list."""
+"""界面到决策单元的路由, 集中维护所有界面类型."""
 
 from __future__ import annotations
 
@@ -7,18 +7,17 @@ from typing import Optional
 from .contracts import DecisionKind, DecisionRequest
 from .model import GameState, Screen
 
-# Screens owned by the build unit: deck construction and everything that is not
-# combat, routing or the menu.
+# 构筑单元负责卡组构筑, 以及战斗, 路线和菜单之外的界面.
+# 这些界面统一交给构筑工具处理.
 BUILD_SCENES = frozenset({"card_reward", "rewards", "shop", "event", "rest", "rest_site",
                           "treasure", "bundle_select"})
 
 
 def route(state: GameState) -> Optional[DecisionRequest]:
-    """Return the request for this screen, or None when the loop owns it.
+    """根据当前界面生成决策请求; 由主循环处理的界面返回 None.
 
-    Menu and game-over are loop concerns: they are not game decisions, they are
-    lifecycle.  Unknown screens also return None so the loop can stop instead
-    of inventing a policy.
+    菜单和结算界面属于生命周期管理, 由主循环负责, 不交给策略工具决策.
+    未知界面也返回 None, 交给主循环处理, 避免猜测操作.
     """
     if state.screen in (Screen.COMBAT, Screen.ELITE, Screen.BOSS):
         return DecisionRequest(kind=DecisionKind.COMBAT, state=state)
