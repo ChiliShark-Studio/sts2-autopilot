@@ -26,13 +26,23 @@ NodeKey = tuple[int, int]
 
 # 一次规划的路线长度上限, 防止模型返回异常长的序列.
 MAX_ROUTE = 30
-# 计划中的下一跳是精英且血量低于此比例时, 重新评估一次是否仍要走精英.
-# 这里只是重新征询, 模型仍可以选择继续走精英, 不做硬性拦截.
+# 计划中的下一跳是精英时, 用模拟器按本幕所有精英各跑几局再判断.
+# 地图上不显示是哪一只精英, 所以只看最坏情况.
+ELITE_SIM_RUNS = 2
+# 本幕没有可模拟的精英时, 退回按血量比例征询.
 ELITE_RECHECK_HP = 0.5
 
 
 def build_prompt(state: GameState) -> str:
     return json.dumps(situation(state, StrategyContext()), ensure_ascii=False)
+
+
+def _describe_risk(risk) -> str:  # noqa: ANN001 - sim.risk.EliteAssessment, 延迟导入避免循环
+    """把逐精英的模拟结果写成模型能读的一句话."""
+    parts = [f"{r.name} 胜率{r.win_rate:.0%}/掉血{r.avg_damage:.0f}-{r.max_damage}"
+             for r in risk.risks]
+    return (", ".join(parts)
+            + f" → 最坏 胜率{risk.worst_win_rate:.0%}、掉血{risk.worst_damage} 血")
 
 
 def _map_raw(state: GameState) -> dict:
@@ -190,17 +200,28 @@ class MapRouterTool:
 
         if planned is not None and planned in keys:
             node_type = _nodes(map_raw).get(planned, "")
-            low_hp_elite = node_type == "Elite" and state.player.hp_ratio < ELITE_RECHECK_HP
-            if not low_hp_elite:
+            risk = self._elite_risk(state) if node_type == "Elite" else None
+            if risk is None:
+                # 本幕没有可模拟的精英: 退回按血量比例征询.
+                needs_recheck = (node_type == "Elite"
+                                 and state.player.hp_ratio < ELITE_RECHECK_HP)
+                replan_reason = (
+                    f"计划中的下一节点是精英, 但当前血量 {state.player.hp}/{state.player.max_hp}, "
+                    f"重新评估是否仍要走精英" if needs_recheck else "")
+            else:
+                needs_recheck = not risk.affordable(state.player.hp)
+                replan_reason = (
+                    f"计划中的下一节点是精英。模拟结果(按本幕所有精英, 取最坏): {_describe_risk(risk)}。"
+                    f"当前血量 {state.player.hp}/{state.player.max_hp}. 重新评估路线, 决定绕开还是接受。"
+                    if needs_recheck else "")
+            if not needs_recheck:
                 index = keys.index(planned)
                 self.context.route = self.context.route[1:]
                 note = self.context.route_note or "开局计划"
                 self._awaiting_move = (position, planned)
                 return self._choose(options[index], f"按路线计划前往 {planned}：{note}",
                                     Source.SCRIPT)
-            # 血量已经偏低, 精英不再是既定路线: 把选择权交回模型.
-            replan_reason = (f"计划中的下一节点是精英, 但当前血量 {state.player.hp}/{state.player.max_hp}, "
-                             f"重新评估是否仍要走精英")
+            # 精英不再是既定路线: 把选择权交回模型.
             self.context.route_note = replan_reason
         else:
             replan_reason = ""
@@ -248,6 +269,26 @@ class MapRouterTool:
             extra["llm"] = dict(self.client.last_meta)
         return Decision(action=ChooseMapNode(index), reason=f"{note}；{reason}",
                         source=Source.HEURISTIC, tool=self.name, extra=extra)
+
+    def _elite_risk(self, state: GameState):
+        """用当前牌组与血量, 按本幕可能出现的精英各跑几局.
+
+        地图上不显示具体是哪一只精英, 所以只能评估最坏情况;
+        本幕没有可模拟的精英时返回 None, 调用方退回血量阈值.
+        """
+        # 延迟导入: brain.sim 会经由 combat_search 反向导入本模块.
+        from ..sim import scenarios
+        from ..sim.engine import deck_from_cards
+        from ..sim.risk import assess
+
+        act = state.run.act
+        if act not in scenarios.ELITES_BY_ACT:
+            return None
+        deck = deck_from_cards(list(state.player.deck))
+        if not deck:
+            return None
+        return assess(deck, state.player.hp, state.player.max_hp, act,
+                      runs=ELITE_SIM_RUNS)
 
     def _plan(self, state: GameState, map_raw: dict, options: list[dict],
               replan_reason: str = "") -> Optional[tuple[list[NodeKey], str]]:

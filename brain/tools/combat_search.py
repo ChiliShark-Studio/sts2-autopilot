@@ -78,6 +78,9 @@ _RINGING = {"昏眩", "ringing", "RINGING_POWER"}
 _REVIVES = {"幻象", "illusion", "ILLUSION_POWER"}
 # 爪牙: 领导者死亡时放弃战斗, 因此击杀首领等于结束战斗.
 _MINION = {"爪牙", "minion", "MINION_POWER"}
+# 缓慢: 每打出一张牌, 该敌人本回合从攻击牌受到的伤害 +10%.
+_SLOW = {"缓慢", "slow", "SLOW_POWER"}
+SLOW_STEP = 0.10
 # 方案终点会死亡时的惩罚分, 让搜索优先选择活下来的打法.
 LETHAL_PENALTY = 1000.0
 # 每回合额外获得 1 点能量大约值多少分 (约等于一张基础攻击牌的伤害).
@@ -120,6 +123,11 @@ def _power(powers: dict[str, int], aliases: set[str]) -> int:
     return 0
 
 
+def _has_power(powers: dict[str, int], aliases: set[str]) -> bool:
+    """只看能力是否存在; 数值可能为 0 (例如回合开始的缓慢), 但机制仍然生效."""
+    return any(key in aliases for key in powers)
+
+
 def _upgraded(card: Card) -> Card:
     """尽量准确地生成一张手牌的升级版本.
 
@@ -152,6 +160,10 @@ class _Enemy:
     revives: bool = False
     # 爪牙: 领导者死亡后离场.
     is_minion: bool = False
+    # 缓慢: 每打出一张牌, 本回合从攻击牌受到的伤害 +10% (层数, 每层 10%).
+    slow: int = 0
+    # 该敌人是否带有"缓慢"能力 (没有的话不累计).
+    has_slow: bool = False
     # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
     slippery: int = 0
     # 无实体: 每次命中的伤害上限为 1.
@@ -224,6 +236,9 @@ class _Sim:
                     powers=dict(e.powers),
                     revives=_power(e.powers, _REVIVES) > 0,
                     is_minion=_power(e.powers, _MINION) > 0,
+                    # 状态里的数值是百分比 (10 = 10%), 换算成层数.
+                    slow=_power(e.powers, _SLOW) // 10,
+                    has_slow=_has_power(e.powers, _SLOW),
                 )
                 for e in battle.alive_enemies
             ],
@@ -266,6 +281,10 @@ class _Sim:
                 dmg = card.damage + self.strength
                 if enemy.vulnerable:
                     dmg = int(dmg * 1.5)
+                # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
+                # 因此攻击牌应当留到最后打, 前置的非攻击牌会抬高后续伤害.
+                if enemy.slow:
+                    dmg = int(dmg * (1 + SLOW_STEP * enemy.slow))
                 if self.weak:
                     dmg = int(dmg * 0.75)
                 if self.shrink:
@@ -318,6 +337,10 @@ class _Sim:
         for enemy in targets:
             enemy.vulnerable += card.vulnerable
             enemy.weak += card.weak
+        # 缓慢: 任何一张牌打出后, 该敌人本回合受到的攻击伤害 +10% (包括非攻击牌).
+        for enemy in self.enemies:
+            if enemy.has_slow and enemy.alive:
+                enemy.slow += 1
         self.energy += card.energy
         return True
 

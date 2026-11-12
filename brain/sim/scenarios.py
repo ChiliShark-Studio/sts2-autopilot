@@ -90,6 +90,54 @@ def _vantom() -> list[Monster]:
     )]
 
 
+def _bygone_effigy() -> list[Monster]:
+    """密林精英 旧日雕像: 127 血, 固有缓慢.
+
+    行动: 沉睡(开局不行动) -> 苏醒(+10 力量) -> 斩击(13) 循环.
+    缓慢: 本回合每打出一张牌, 从攻击牌受到的伤害 +10% (回合结束清零),
+    所以攻击牌应当留到最后打.
+    数值来源: Spire Codex (127 血, 招式 沉睡/苏醒+10 力量/斩击 13, 固有 Slow).
+    """
+    return [Monster(
+        "旧日雕像", hp=127, max_hp=127,
+        script=[
+            Intent("sleep"),
+            Intent("buff", strength=10),
+            Intent("attack", damage=13),
+        ],
+        repeat=True, repeat_from=2, entity_id="BYGONE_EFFIGY_0", has_slow=True,
+    )]
+
+
+def _byrdonis() -> list[Monster]:
+    """密林精英 多尼斯异鸟: 81-84 血, 固有领地 1.
+
+    领地: 自己回合结束时获得 1 点力量 (每回合累积, 所以拖得越久越疼).
+    行动循环: 啄击(3x3) -> 飞扑(17).
+    数值来源: Spire Codex (81-84 血, Territorial 1, 啄击 3x3 / 飞扑 17).
+    """
+    return [Monster(
+        "多尼斯异鸟", hp=84, max_hp=84,
+        script=[Intent("attack", damage=3, hits=3), Intent("attack", damage=17)],
+        entity_id="BYRDONIS_0", territorial=1,
+    )]
+
+
+def _phrog_parasite() -> list[Monster]:
+    """密林精英 异蛙寄生虫: 61-64 血, 固有寄生 4.
+
+    行动循环: 感染(塞感染牌) -> 甩动(4x4).
+    寄生: 死亡时召唤其他东西, 本模型未重建该阶段, 因此结果偏乐观.
+    数值来源: Spire Codex (61-64 血, Infested 4, 感染 / 甩动 4x4).
+    """
+    return [Monster(
+        "异蛙寄生虫", hp=64, max_hp=64,
+        script=[Intent("custom", handler="add_infection", params={"count": 1, "pile": "discard"}),
+                Intent("attack", damage=4, hits=4)],
+        entity_id="PHROG_PARASITE_0",
+    )]
+
+
 ENCOUNTERS = {
     "nibbit": _nibbit,
     "slimes": _slimes,
@@ -97,6 +145,14 @@ ENCOUNTERS = {
     "lagavulin": _lagavulin,
     "ceremonial_beast": _ceremonial_beast,
     "vantom": _vantom,
+    "bygone_effigy": _bygone_effigy,
+    "byrdonis": _byrdonis,
+    "phrog_parasite": _phrog_parasite,
+}
+
+# 各幕可能的精英 (地图上只显示 "精英", 不显示是哪一只).
+ELITES_BY_ACT: dict[int, tuple[str, ...]] = {
+    1: ("bygone_effigy", "byrdonis", "phrog_parasite"),
 }
 
 

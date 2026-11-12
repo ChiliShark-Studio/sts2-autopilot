@@ -61,6 +61,11 @@ class Monster:
     skip_next: bool = False
     # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
     slippery: int = 0
+    # 缓慢: 本回合每打出一张牌, 从攻击牌受到的伤害 +10% (层数, 每层 10%).
+    has_slow: bool = False
+    slow: int = 0
+    # 领地: 自己回合结束时获得 X 点力量 (多尼斯异鸟).
+    territorial: int = 0
 
     @property
     def alive(self) -> bool:
@@ -201,6 +206,9 @@ class Fight:
         self.ringing_active = self.ringing_pending > 0
         self.ringing_pending = 0
         self.turn_cards_played = 0
+        # 缓慢在回合结束时清零.
+        for monster in self.monsters:
+            monster.slow = 0
         self._draw(self.draw_per_turn)
 
     # -- 动作处理 --
@@ -238,6 +246,9 @@ class Fight:
                 if monster.slippery > 0:
                     dmg = 1
                     monster.slippery -= 1
+                # 缓慢: 本回合每打出一张牌, 该敌人受到的攻击伤害 +10%.
+                if monster.has_slow and monster.slow:
+                    dmg = int(dmg * (1 + 0.1 * monster.slow))
                 absorbed = min(monster.block, dmg)
                 monster.block -= absorbed
                 hit = max(0, dmg - absorbed)
@@ -263,6 +274,10 @@ class Fight:
         # 一张牌完整结算后切换阶段, 保留玩家血量, 牌堆, 格挡, 能量和当前回合.
         if self.hp > 0 and not any(m.alive for m in self.monsters) and self.following_phases:
             self.monsters = self.following_phases.pop(0)
+        # 缓慢: 任何一张牌 (含非攻击) 打出后层数 +1, 回合结束时清零.
+        for monster in self.monsters:
+            if monster.has_slow and monster.alive:
+                monster.slow += 1
         return True
 
     def end_turn(self) -> None:
@@ -283,6 +298,10 @@ class Fight:
                 monster.skip_next = False
                 continue
             intent = monster.intent()
+            if intent.type == "sleep":
+                # 沉睡: 这一回合什么都不做 (旧日雕像开局).
+                monster.step += 1
+                continue
             damage = monster.attack_damage()
             monster.block = 0
 
@@ -300,6 +319,9 @@ class Fight:
 
             # 所有意图都可在行动结束后增减力量, 包括攻击后强化.
             monster.strength += intent.strength
+            # 领地: 自己回合结束时累积力量.
+            if monster.territorial:
+                monster.strength += monster.territorial
             monster.step += 1
 
             # 负面状态在敌人行动结束时减少持续回合.
@@ -358,6 +380,9 @@ class Fight:
             if intent.type == "wait":
                 intents = [{"type": "Stun", "label": "", "title": "击晕",
                             "description": "这个敌人在其下一回合无法行动。"}]
+            elif intent.type == "sleep":
+                intents = [{"type": "Sleep", "label": "", "title": "沉睡",
+                            "description": "这个敌人在沉睡，本回合不会行动。"}]
             elif intent.type == "custom":
                 from .special_intents import CUSTOM_INTENTS
 
@@ -414,6 +439,9 @@ class Fight:
             out.append({"id": "WEAK_POWER", "name": "虚弱", "amount": monster.weak})
         if monster.slippery:
             out.append({"id": "SLIPPERY_POWER", "name": "滑溜", "amount": monster.slippery})
+        if monster.has_slow:
+            # 状态里的数值是百分比 (每层 10%).
+            out.append({"id": "SLOW_POWER", "name": "缓慢", "amount": monster.slow * 10})
         if monster.strength:
             out.append({"id": "STRENGTH_POWER", "name": "力量", "amount": monster.strength})
         # 额外能力: 保留 id 和数值, 供敌人机制规则读取 (如仪式兽的横冲直撞层数).

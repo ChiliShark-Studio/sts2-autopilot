@@ -255,9 +255,15 @@ class EliteRecheckTests(unittest.TestCase):
         self.assertEqual(context.route, ((1, 4),))
 
     def test_healthy_keeps_planned_elite(self):
+        # 模拟结论是"扛得住"时, 按计划走精英, 不再调用模型.
+        from brain.sim.risk import EliteAssessment, EliteRisk
+
         context = StrategyContext(route=((0, 3), (1, 4)), route_note="原计划走精英")
         client = _Client({"route": [[2, 3]], "reason": "不应调用"})
-        decision = tool(client, context).decide(request(self._state(70)))
+        router = tool(client, context)
+        router._elite_risk = lambda state: EliteAssessment(
+            [EliteRisk("bygone_effigy", "旧日雕像", 1.0, 10.0, 12)])
+        decision = router.decide(request(self._state(70)))
         self.assertEqual(client.calls, 0)
         self.assertEqual(decision.action.option, 0)  # type: ignore[union-attr]
         self.assertIs(decision.source, Source.SCRIPT)
