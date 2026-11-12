@@ -211,7 +211,13 @@ class BuildFlowTool:
 
         candidates = [(c.index, SelectCardReward(c.index), asdict(c)) for c in cards]
         candidates.append((-1, SkipCardReward(), {"说明": "跳过卡牌奖励"}))
-        decision = self._choose(request, "选择一张奖励牌或跳过；没有明显补强时不要扩大卡组。", candidates)
+        decision = self._choose(
+            request,
+            "选择一张奖励牌或跳过。按主线判断：这张牌服务哪条主线、补的是哪个缺口"
+            "（引擎/收益件/格挡/过牌）？需要前置（例如全身撞击需要壁垒、欺凌需要易伤来源）"
+            "而前置还没有时，先跳过。答不上来就跳过，不要扩大牌组。"
+            "没有引擎时优先拿引擎，引擎优先于收益件。",
+            candidates)
         if decision is not None:
             self._pending_card_open = True
             return decision

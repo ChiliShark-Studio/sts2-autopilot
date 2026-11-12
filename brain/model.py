@@ -101,6 +101,8 @@ class Card:
     # 每回合开始的格挡与其生命代价 (绯红披风).
     per_turn_block: int = 0
     per_turn_hp_cost: int = 0
+    # 全身撞击: 伤害等于打出时的格挡.
+    body_slam: bool = False
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -141,6 +143,7 @@ class Card:
             random_exhaust=parsed.get("random_exhaust", 0),
             per_turn_block=parsed.get("per_turn_block", 0),
             per_turn_hp_cost=parsed.get("per_turn_hp_cost", 0),
+            body_slam=parsed.get("body_slam", False),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

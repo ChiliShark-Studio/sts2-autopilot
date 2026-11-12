@@ -126,6 +126,34 @@ class DeckCard:
     end_turn_damage: int = 0
     id: str = ""
     description: str = ""
+    # ---- 能力牌 (Power) ----
+    # 打出时立即获得的力量 (燃烧).
+    strength: int = 0
+    # 每回合开始获得的力量 (恶魔形态): 打出后一直生效.
+    per_turn_strength: int = 0
+    # 每次消耗牌时获得的格挡 / 抽牌 (无痛 / 黑暗之拥).
+    block_per_exhaust: int = 0
+    draw_per_exhaust: int = 0
+    # 壁垒: 回合结束不清空格挡.
+    keep_block: bool = False
+    # 主宰: 每次获得格挡时对该敌人造成伤害.
+    juggernaut: int = 0
+    # 不可动摇: 每回合第一次从牌获得格挡时翻倍.
+    double_first_block: bool = False
+    # 破裂: 每次因打出牌失去生命时获得力量.
+    rupture: int = 0
+    # 残忍: 易伤敌人的额外受伤倍率 (0.25 = 再多 25%).
+    cruelty: float = 0.0
+    # 腐化: 技能牌费用变 0 且打出后消耗.
+    corruption: bool = False
+    # 以生命为费用 (烙印).
+    hp_cost: int = 0
+    # 全身撞击: 伤害等于打出时的格挡.
+    scales_with_block: bool = False
+    # 欺凌: 每层易伤额外伤害.
+    per_vulnerable: int = 0
+    # 灰烬打击: 消耗牌堆每张额外伤害.
+    per_exhaust: int = 0
 
 
 @dataclass
@@ -180,6 +208,18 @@ class Fight:
         self.discard: list[DeckCard] = []
         self.cards_played = 0
         self.damage_taken = 0
+        # ---- 能力牌带来的持续状态 ----
+        self.per_turn_strength = 0
+        self.block_per_exhaust = 0
+        self.draw_per_exhaust = 0
+        self.keep_block = False
+        self.juggernaut = 0
+        self.double_first_block = False
+        self.first_block_used = False
+        self.rupture = 0
+        self.cruelty = 0.0
+        self.corruption = False
+        self.exhausted = 0
         # 昏眩: 敌人施加后, 玩家下个回合只能打出 1 张牌.
         self.ringing_pending = 0
         self.ringing_active = False
@@ -199,9 +239,14 @@ class Fight:
 
     def start_turn(self) -> None:
         if self._started:
-            self.block = 0
+            if not self.keep_block:
+                self.block = 0
             self.energy = self.max_energy
         self._started = True
+        # 恶魔形态: 每个回合开始累积力量.
+        self.strength += self.per_turn_strength
+        # 不可动摇: 每回合第一次获得格挡时翻倍.
+        self.first_block_used = False
         # 昏眩只持续一个回合: 上一轮被施加的话, 本回合生效.
         self.ringing_active = self.ringing_pending > 0
         self.ringing_pending = 0
@@ -216,15 +261,28 @@ class Fight:
         if hand_index < 0 or hand_index >= len(self.hand):
             return False
         card = self.hand[hand_index]
-        if not card.playable or card.cost > self.energy:
+        # 腐化: 技能牌 (无伤害牌) 费用变 0, 且打出后消耗.
+        corrupted = self.corruption and card.damage == 0
+        cost = 0 if corrupted else card.cost
+        if not card.playable or cost > self.energy:
             return False
         # 昏眩: 本回合已经出过一张牌, 不能再出.
         if self.ringing_active and self.turn_cards_played >= 1:
             return False
-        self.energy -= card.cost
+        self.energy -= cost
         self.hand.pop(hand_index)
         self.cards_played += 1
         self.turn_cards_played += 1
+
+        # 以生命为费用 (烙印): 破裂会把掉血换成力量.
+        if card.hp_cost:
+            self.hp = max(0, self.hp - card.hp_cost)
+            self.damage_taken += card.hp_cost
+            if self.rupture:
+                self.strength += self.rupture
+        # 立即获得力量 (燃烧).
+        if card.strength:
+            self.strength += card.strength
 
         monster = None
         if target:
@@ -236,12 +294,21 @@ class Fight:
             alive = [m for m in self.monsters if m.alive]
             monster = alive[0] if alive else None
 
-        if card.damage > 0 and monster is not None:
+        if (card.damage > 0 or card.scales_with_block or card.per_vulnerable) and monster is not None:
             dealt = 0
+            # 按牌面缩放规则算出这张牌的伤害 (全身撞击/欺凌/灰烬打击).
+            base_damage = card.damage
+            if card.scales_with_block:
+                base_damage = self.block
+            if card.per_vulnerable and monster is not None:
+                base_damage += card.per_vulnerable * monster.vulnerable
+            if card.per_exhaust:
+                base_damage += card.per_exhaust * self.exhausted
             for _ in range(max(1, card.hits)):
-                dmg = max(0, card.damage + self.strength)
+                dmg = max(0, base_damage + self.strength)
                 if monster.vulnerable:
-                    dmg = int(dmg * 1.5)
+                    # 残忍提高易伤额外倍率.
+                    dmg = int(dmg * (1.5 + self.cruelty))
                 # 滑溜: 每次命中只掉 1 点生命, 并消耗一层.
                 if monster.slippery > 0:
                     dmg = 1
@@ -258,7 +325,31 @@ class Fight:
             monster.on_damaged(dealt)
 
         if card.block > 0:
-            self.block += max(0, card.block + self.dexterity)
+            gain = max(0, card.block + self.dexterity)
+            # 不可动摇: 每回合第一次从牌获得格挡时翻倍.
+            if self.double_first_block and not self.first_block_used:
+                gain *= 2
+                self.first_block_used = True
+            self.block += gain
+            # 主宰: 每次获得格挡时对敌人造成伤害.
+            if self.juggernaut:
+                for enemy in self.monsters:
+                    if enemy.alive:
+                        enemy.hp -= self.juggernaut
+
+        # 能力牌: 打出后持续生效.
+        self.per_turn_strength += card.per_turn_strength
+        self.block_per_exhaust += card.block_per_exhaust
+        self.draw_per_exhaust += card.draw_per_exhaust
+        self.juggernaut += card.juggernaut
+        self.rupture += card.rupture
+        self.cruelty += card.cruelty
+        if card.keep_block:
+            self.keep_block = True
+        if card.double_first_block:
+            self.double_first_block = True
+        if card.corruption:
+            self.corruption = True
 
         if card.vulnerable and monster is not None:
             monster.vulnerable += card.vulnerable
@@ -269,7 +360,14 @@ class Fight:
         if card.draw:
             self._draw(card.draw)
 
-        if not card.exhaust:
+        # 消耗: 腐化的技能也计算在内; 无痛/黑暗之拥因此触发.
+        if card.exhaust or corrupted:
+            self.exhausted += 1
+            if self.block_per_exhaust:
+                self.block += self.block_per_exhaust
+            if self.draw_per_exhaust:
+                self._draw(self.draw_per_exhaust)
+        else:
             self.discard.append(card)
         # 一张牌完整结算后切换阶段, 保留玩家血量, 牌堆, 格挡, 能量和当前回合.
         if self.hp > 0 and not any(m.alive for m in self.monsters) and self.following_phases:

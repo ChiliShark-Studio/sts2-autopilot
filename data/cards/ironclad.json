@@ -1,0 +1,1328 @@
+{
+ "打击": {
+  "id": "STRIKE_IRONCLAD",
+  "base": {
+   "variant": "base",
+   "id": "STRIKE_IRONCLAD",
+   "name": "打击",
+   "type": "Attack",
+   "rarity": "Basic",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成6点伤害。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "STRIKE_IRONCLAD",
+   "name": "打击+",
+   "type": "Attack",
+   "rarity": "Basic",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "防御": {
+  "id": "DEFEND_IRONCLAD",
+  "base": {
+   "variant": "base",
+   "id": "DEFEND_IRONCLAD",
+   "name": "防御",
+   "type": "Skill",
+   "rarity": "Basic",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得5点格挡。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "DEFEND_IRONCLAD",
+   "name": "防御+",
+   "type": "Skill",
+   "rarity": "Basic",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得8点格挡。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "痛击": {
+  "id": "BASH",
+  "base": {
+   "variant": "base",
+   "id": "BASH",
+   "name": "痛击",
+   "type": "Attack",
+   "rarity": "Basic",
+   "cost": "2",
+   "star_cost": null,
+   "description": "造成8点伤害。 给予2层易伤。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BASH",
+   "name": "痛击+",
+   "type": "Attack",
+   "rarity": "Basic",
+   "cost": "2",
+   "star_cost": null,
+   "description": "造成10点伤害。 给予3层易伤。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "上勾拳": {
+  "id": "UPPERCUT",
+  "base": {
+   "variant": "base",
+   "id": "UPPERCUT",
+   "name": "上勾拳",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "2",
+   "star_cost": null,
+   "description": "造成13点伤害。 给予1层虚弱。 给予1层易伤。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "虚弱",
+     "description": "虚弱的生物造成的攻击伤害减少25%。"
+    },
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "UPPERCUT",
+   "name": "上勾拳+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "2",
+   "star_cost": null,
+   "description": "造成13点伤害。 给予2层虚弱。 给予2层易伤。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "虚弱",
+     "description": "虚弱的生物造成的攻击伤害减少25%。"
+    },
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "战栗": {
+  "id": "TREMBLE",
+  "base": {
+   "variant": "base",
+   "id": "TREMBLE",
+   "name": "战栗",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "给予3层易伤。 消耗。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    },
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "TREMBLE",
+   "name": "战栗+",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "给予4层易伤。 消耗。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    },
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  }
+ },
+ "耸肩无视": {
+  "id": "SHRUG_IT_OFF",
+  "base": {
+   "variant": "base",
+   "id": "SHRUG_IT_OFF",
+   "name": "耸肩无视",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得8点格挡。 抽1张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "SHRUG_IT_OFF",
+   "name": "耸肩无视+",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得11点格挡。 抽1张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "双重打击": {
+  "id": "TWIN_STRIKE",
+  "base": {
+   "variant": "base",
+   "id": "TWIN_STRIKE",
+   "name": "双重打击",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成5点伤害两次。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "TWIN_STRIKE",
+   "name": "双重打击+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成7点伤害两次。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "连续反弹": {
+  "id": "RICOCHET",
+  "base": {
+   "variant": "base",
+   "id": "RICOCHET",
+   "name": "连续反弹",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "2",
+   "star_cost": null,
+   "description": "奇巧。 随机对敌人造成3点伤害4次。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "奇巧",
+     "description": "如果这张牌在你的回合结束前从你的手牌中被丢弃，则免费将其打出。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "RICOCHET",
+   "name": "连续反弹+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "2",
+   "star_cost": null,
+   "description": "奇巧。 随机对敌人造成3点伤害5次。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "奇巧",
+     "description": "如果这张牌在你的回合结束前从你的手牌中被丢弃，则免费将其打出。"
+    }
+   ]
+  }
+ },
+ "飞剑回旋镖": {
+  "id": "SWORD_BOOMERANG",
+  "base": {
+   "variant": "base",
+   "id": "SWORD_BOOMERANG",
+   "name": "飞剑回旋镖",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "随机对敌人造成3点伤害3次。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "SWORD_BOOMERANG",
+   "name": "飞剑回旋镖+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "随机对敌人造成3点伤害4次。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "旋风斩": {
+  "id": "WHIRLWIND",
+  "base": {
+   "variant": "base",
+   "id": "WHIRLWIND",
+   "name": "旋风斩",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "X",
+   "star_cost": null,
+   "description": "对所有敌人造成5点伤害X次。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "WHIRLWIND",
+   "name": "旋风斩+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "X",
+   "star_cost": null,
+   "description": "对所有敌人造成8点伤害X次。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "全身撞击": {
+  "id": "BODY_SLAM",
+  "base": {
+   "variant": "base",
+   "id": "BODY_SLAM",
+   "name": "全身撞击",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成你当前格挡值的伤害。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BODY_SLAM",
+   "name": "全身撞击+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "0",
+   "star_cost": null,
+   "description": "造成你当前格挡值的伤害。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "欺凌": {
+  "id": "BULLY",
+  "base": {
+   "variant": "base",
+   "id": "BULLY",
+   "name": "欺凌",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "0",
+   "star_cost": null,
+   "description": "造成4点伤害。 该敌人身上每有一层易伤就额外造成2点伤害。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BULLY",
+   "name": "欺凌+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "0",
+   "star_cost": null,
+   "description": "造成4点伤害。 该敌人身上每有一层易伤就额外造成3点伤害。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "灰烬打击": {
+  "id": "ASHEN_STRIKE",
+  "base": {
+   "variant": "base",
+   "id": "ASHEN_STRIKE",
+   "name": "灰烬打击",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成6点伤害。 你的消耗牌堆中每有一张牌，伤害增加3。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "ASHEN_STRIKE",
+   "name": "灰烬打击+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成6点伤害。 你的消耗牌堆中每有一张牌，伤害增加4。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  }
+ },
+ "恶魔形态": {
+  "id": "DEMON_FORM",
+  "base": {
+   "variant": "base",
+   "id": "DEMON_FORM",
+   "name": "恶魔形态",
+   "type": "Power",
+   "rarity": "Rare",
+   "cost": "3",
+   "star_cost": null,
+   "description": "在你的回合开始时，获得2点力量。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "DEMON_FORM",
+   "name": "恶魔形态+",
+   "type": "Power",
+   "rarity": "Rare",
+   "cost": "3",
+   "star_cost": null,
+   "description": "在你的回合开始时，获得3点力量。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  }
+ },
+ "燃烧": {
+  "id": "INFLAME",
+  "base": {
+   "variant": "base",
+   "id": "INFLAME",
+   "name": "燃烧",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得2点力量。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "INFLAME",
+   "name": "燃烧+",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得3点力量。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  }
+ },
+ "烙印": {
+  "id": "BRAND",
+  "base": {
+   "variant": "base",
+   "id": "BRAND",
+   "name": "烙印",
+   "type": "Skill",
+   "rarity": "Rare",
+   "cost": "0",
+   "star_cost": null,
+   "description": "失去1点生命。 消耗1张牌。 获得1点力量。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    },
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BRAND",
+   "name": "烙印+",
+   "type": "Skill",
+   "rarity": "Rare",
+   "cost": "0",
+   "star_cost": null,
+   "description": "失去1点生命。 消耗1张牌。 获得2点力量。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    },
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  }
+ },
+ "黑暗之拥": {
+  "id": "DARK_EMBRACE",
+  "base": {
+   "variant": "base",
+   "id": "DARK_EMBRACE",
+   "name": "黑暗之拥",
+   "type": "Power",
+   "rarity": "Rare",
+   "cost": "2",
+   "star_cost": null,
+   "description": "每当有一张牌被消耗时， 抽1张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "DARK_EMBRACE",
+   "name": "黑暗之拥+",
+   "type": "Power",
+   "rarity": "Rare",
+   "cost": "1",
+   "star_cost": null,
+   "description": "每当有一张牌被消耗时， 抽1张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  }
+ },
+ "凶恶": {
+  "id": "VICIOUS",
+  "base": {
+   "variant": "base",
+   "id": "VICIOUS",
+   "name": "凶恶",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "每当你给予易伤时，抽1张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "VICIOUS",
+   "name": "凶恶+",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "每当你给予易伤时，抽2张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "闪电霹雳": {
+  "id": "THUNDERCLAP",
+  "base": {
+   "variant": "base",
+   "id": "THUNDERCLAP",
+   "name": "闪电霹雳",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "对所有敌人造成4点伤害，给予1层易伤。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "THUNDERCLAP",
+   "name": "闪电霹雳+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "对所有敌人造成7点伤害，给予1层易伤。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "武装": {
+  "id": "ARMAMENTS",
+  "base": {
+   "variant": "base",
+   "id": "ARMAMENTS",
+   "name": "武装",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得5点格挡。 升级你手牌中的一张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "ARMAMENTS",
+   "name": "武装+",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得5点格挡。 升级你手牌中的所有牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "预备打击": {
+  "id": "SETUP_STRIKE",
+  "base": {
+   "variant": "base",
+   "id": "SETUP_STRIKE",
+   "name": "预备打击",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成7点伤害。 在本回合内获得2点力量。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "SETUP_STRIKE",
+   "name": "预备打击+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 在本回合内获得3点力量。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  }
+ },
+ "头槌": {
+  "id": "HEADBUTT",
+  "base": {
+   "variant": "base",
+   "id": "HEADBUTT",
+   "name": "头槌",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 将你弃牌堆中的一张牌放到抽牌堆顶部。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "HEADBUTT",
+   "name": "头槌+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成12点伤害。 将你弃牌堆中的一张牌放到抽牌堆顶部。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "燃烧契约": {
+  "id": "BURNING_PACT",
+  "base": {
+   "variant": "base",
+   "id": "BURNING_PACT",
+   "name": "燃烧契约",
+   "type": "Skill",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "消耗1张牌。 抽2张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BURNING_PACT",
+   "name": "燃烧契约+",
+   "type": "Skill",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "消耗1张牌。 抽3张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    }
+   ]
+  }
+ },
+ "坚毅": {
+  "id": "TRUE_GRIT",
+  "base": {
+   "variant": "base",
+   "id": "TRUE_GRIT",
+   "name": "坚毅",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得7点格挡。  随机消耗1张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    },
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "TRUE_GRIT",
+   "name": "坚毅+",
+   "type": "Skill",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得9点格挡。 消耗1张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "消耗",
+     "description": "在战斗结束前移除。"
+    },
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "撕裂": {
+  "id": "RUPTURE",
+  "base": {
+   "variant": "base",
+   "id": "RUPTURE",
+   "name": "撕裂",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "每当你在你的回合失去生命值时, 获得1点力量。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "RUPTURE",
+   "name": "撕裂+",
+   "type": "Power",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "每当你在你的回合失去生命值时, 获得2点力量。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "力量",
+     "description": "力量会增加攻击牌造成的伤害。"
+    }
+   ]
+  }
+ },
+ "挑衅": {
+  "id": "TAUNT",
+  "base": {
+   "variant": "base",
+   "id": "TAUNT",
+   "name": "挑衅",
+   "type": "Skill",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得7点格挡。 给予1层易伤。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    },
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "TAUNT",
+   "name": "挑衅+",
+   "type": "Skill",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得8点格挡。 给予2层易伤。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    },
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ },
+ "劫掠": {
+  "id": "PILLAGE",
+  "base": {
+   "variant": "base",
+   "id": "PILLAGE",
+   "name": "劫掠",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成6点伤害。 抽牌直到你抽到一张非攻击牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "PILLAGE",
+   "name": "劫掠+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 抽牌直到你抽到一张非攻击牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "突破": {
+  "id": "BREAKTHROUGH",
+  "base": {
+   "variant": "base",
+   "id": "BREAKTHROUGH",
+   "name": "突破",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "失去1点生命。 对所有敌人造成9点伤害。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "BREAKTHROUGH",
+   "name": "突破+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "失去1点生命。 对所有敌人造成13点伤害。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "暴走": {
+  "id": "RAMPAGE",
+  "base": {
+   "variant": "base",
+   "id": "RAMPAGE",
+   "name": "暴走",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 将这张牌在本场战斗中的伤害增加5。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "RAMPAGE",
+   "name": "暴走+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 将这张牌在本场战斗中的伤害增加9。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "拆卸": {
+  "id": "DISMANTLE",
+  "base": {
+   "variant": "base",
+   "id": "DISMANTLE",
+   "name": "拆卸",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成8点伤害。 如果该敌人有易伤状态，则攻击两次。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "DISMANTLE",
+   "name": "拆卸+",
+   "type": "Attack",
+   "rarity": "Uncommon",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成10点伤害。 如果该敌人有易伤状态，则攻击两次。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "易伤",
+     "description": "易伤的生物从攻击中受到的伤害增加50%。"
+    }
+   ]
+  }
+ },
+ "剑柄打击": {
+  "id": "POMMEL_STRIKE",
+  "base": {
+   "variant": "base",
+   "id": "POMMEL_STRIKE",
+   "name": "剑柄打击",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成9点伤害。 抽1张牌。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": []
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "POMMEL_STRIKE",
+   "name": "剑柄打击+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "造成10点伤害。 抽2张牌。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": []
+  }
+ },
+ "铁斩波": {
+  "id": "IRON_WAVE",
+  "base": {
+   "variant": "base",
+   "id": "IRON_WAVE",
+   "name": "铁斩波",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得5点格挡。 造成5点伤害。",
+   "is_upgraded": false,
+   "is_upgradable": true,
+   "current_upgrade_level": 0,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  },
+  "upgraded": {
+   "variant": "upgraded",
+   "id": "IRON_WAVE",
+   "name": "铁斩波+",
+   "type": "Attack",
+   "rarity": "Common",
+   "cost": "1",
+   "star_cost": null,
+   "description": "获得7点格挡。 造成7点伤害。",
+   "is_upgraded": true,
+   "is_upgradable": false,
+   "current_upgrade_level": 1,
+   "max_upgrade_level": 1,
+   "keywords": [
+    {
+     "name": "格挡",
+     "description": "在下个回合前，阻挡伤害。"
+    }
+   ]
+  }
+ }
+}

@@ -278,7 +278,7 @@ class _Sim:
             for enemy in targets:
                 if not enemy.alive:
                     continue
-                dmg = card.damage + self.strength
+                dmg = (self.block if card.body_slam else card.damage) + self.strength
                 if enemy.vulnerable:
                     dmg = int(dmg * 1.5)
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.

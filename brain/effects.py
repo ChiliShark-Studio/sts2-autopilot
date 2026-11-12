@@ -35,6 +35,8 @@ _PLATED = re.compile(r"获得\s*(\d+)\s*层覆甲")
 _FUTURE_BLOCK = re.compile(r"接下来的\s*(\d+)\s*个回合开始时[^。]*?获得\s*(\d+)\s*点格挡")
 # 随机消耗: "随机消耗1张牌。" 无法选择烧哪张, 只能决定要不要冒这个险.
 _RANDOM_EXHAUST = re.compile(r"随机消耗\s*(\d+)\s*张牌")
+# 全身撞击: "造成你当前格挡值的伤害。" 伤害取决于打出时的格挡, 不能用固定值.
+_BODY_SLAM = re.compile(r"当前格挡值?\s*的伤害")
 # 每回合开始的效果 (绯红披风): "在你的回合开始时，失去1点生命并获得8点格挡。"
 _PER_TURN_BLOCK = re.compile(
     r"回合开始时[^。]*?失去\s*(\d+)\s*点生命[^。]*?获得\s*(\d+)\s*点格挡")
@@ -188,6 +190,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "hp_cost": _first(_HP_COST, desc),
         # 覆甲: 回合结束时按层数获得格挡.
         "plated": _first(_PLATED, desc),
+        # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
+        "body_slam": bool(_BODY_SLAM.search(desc)),
         # 后续回合的格挡 (坚韧之环): 回合数与每回合格挡分开记, 由搜索按剩余回合折算.
         "future_block_turns": future_block_turns,
         "future_block_per_turn": future_block_per_turn,
