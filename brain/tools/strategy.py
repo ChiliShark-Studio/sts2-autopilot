@@ -61,6 +61,10 @@ A10 不要走纯自伤/破裂流（血量波动大，进阶 10 以上不稳）�
   引擎件（力量来源/腐化/壁垒）优先于收益件；没有引擎时先拿引擎。
 - 需要两件套才成立的牌（例如全身撞击需要壁垒、欺凌需要易伤来源）缺前置时不拿。
 - 不要混搭两条主线的半成品；宁可一条主线成型，也不要四不像。
+- **组合优先**：`deck_report.combos_missing` 列出"只差一半"的两件套，补另一半是最高优先；
+  `deck_report.combos_ready` 说明这局的赢法已经成立，之后围绕它补格挡与过牌，不要再铺第三条线。
+- **对策卡**：每幕最多拿 1~2 张针对本幕实际威胁的牌（多敌、状态牌、高伤单体、过牌），
+  参考 `deck_report.counter_coverage` 看覆盖面；不要提前囤下一幕才用得上的对策。
 - 删牌优先级：先删打击，再删防御（基础牌只稀释抽到关键牌的概率）。
 - 升级优先级：先升引擎与斩杀牌，最后才升防御。
 
@@ -96,6 +100,32 @@ PAYOFF_CARDS = {
 }
 VULNERABLE_SOURCES = {"痛击", "战栗", "上勾拳"}
 
+# 两件套组合: (部件, 缺失的另一半, 说明). 手里有其中一件时优先补另一件.
+COMBOS: tuple[tuple[str, str, str], ...] = (
+    ("壁垒", "全身撞击", "壁垒积累格挡, 全身撞击把格挡变成伤害"),
+    ("腐化", "黑暗之拥", "技能免费后靠消耗抽牌形成循环"),
+    ("腐化", "无痛", "技能免费后每次消耗都给格挡"),
+    ("恶魔形态", "飞剑回旋镖", "力量成长需要多段攻击放大"),
+    ("破裂", "烙印", "烙印是最便宜的自伤触发"),
+    ("残酷", "痛击", "易伤放大需要易伤来源"),
+    ("主宰", "不可动摇", "主宰靠获得格挡输出, 不可动摇让格挡翻倍"),
+)
+
+# 对策卡: 针对特定威胁, 本幕拿 1~2 张即可, 不要提前囤.
+COUNTER_CARDS: dict[str, str] = {
+    "旋风斩": "多敌",
+    "连续反弹": "多敌",
+    "闪电霹雳": "多敌",
+    "突破": "多敌",
+    "燃烧契约": "状态牌",
+    "坚毅": "状态牌",
+    "战栗": "高伤单体",
+    "挑衅": "高伤单体",
+    "上勾拳": "高伤单体",
+    "剑柄打击": "过牌",
+    "耸肩无视": "过牌",
+}
+
 
 def deck_report(state: GameState) -> dict:
     """牌组体检: 把"还缺什么"算成模型能直接读的数字.
@@ -123,6 +153,21 @@ def deck_report(state: GameState) -> dict:
     if any(n.rstrip("+") in {"欺凌", "残忍"} for n in names) and not any(
             n.rstrip("+") in VULNERABLE_SOURCES for n in names):
         missing.append("易伤来源(欺凌/残忍的前置)")
+    # 两件套: 已有半件时, 另一半是高优先目标.
+    present = {n.rstrip("+") for n in names}
+    combos_ready = [note for a, b, note in COMBOS if a in present and b in present]
+    combos_missing = []
+    for a, b, note in COMBOS:
+        # 两个方向都要提示: 有壁垒时缺全身撞击, 有全身撞击时缺壁垒.
+        if a in present and b not in present:
+            combos_missing.append(f"{b}（已有 {a}：{note}）")
+        elif b in present and a not in present:
+            combos_missing.append(f"{a}（已有 {b}：{note}）")
+    counter_coverage: dict[str, list[str]] = {}
+    for n in present:
+        role = COUNTER_CARDS.get(n)
+        if role:
+            counter_coverage.setdefault(role, []).append(n)
     return {
         "size": len(deck),
         "strikes": names.count("打击"),
@@ -132,6 +177,11 @@ def deck_report(state: GameState) -> dict:
         "engine_cards": sorted({n for n in names if n.rstrip("+") in ENGINE_CARDS}),
         "payoff_cards": sorted({n for n in names if n.rstrip("+") in PAYOFF_CARDS}),
         "vulnerable_sources": sorted({n for n in names if n.rstrip("+") in VULNERABLE_SOURCES}),
+        # 组合: ready 是两个部件都齐, missing 是只差一半(优先补).
+        "combos_ready": combos_ready,
+        "combos_missing": combos_missing,
+        # 对策覆盖: 每种威胁有几张对策牌, 建议 1~2 张即可.
+        "counter_coverage": {k: sorted(v) for k, v in counter_coverage.items()},
         # 估算: 满牌组循环一次的总伤害 × 每回合 5 抽 ÷ 牌组张数.
         "damage_per_turn": round(damage_total * 5 / len(deck), 1),
         "missing": missing,

@@ -76,5 +76,41 @@ class PromptTests(unittest.TestCase):
             self.assertIn(name, ENGINE_CARDS)
 
 
+class ComboTests(unittest.TestCase):
+    """两件套: 缺一半时优先补另一半."""
+
+    def test_missing_half_is_reported(self):
+        st = GameState.parse(state(("壁垒", "格挡不再消失。"), DEFEND))
+        report = deck_report(st)
+        self.assertEqual(report["combos_ready"], [])
+        self.assertTrue(any("全身撞击" in m for m in report["combos_missing"]))
+
+    def test_missing_half_works_in_both_directions(self):
+        st = GameState.parse(state(BODY_SLAM, DEFEND))
+        report = deck_report(st)
+        self.assertTrue(any("壁垒" in m for m in report["combos_missing"]))
+
+    def test_ready_combo_is_reported_once(self):
+        st = GameState.parse(state(("壁垒", "格挡不再消失。"), BODY_SLAM))
+        report = deck_report(st)
+        self.assertEqual(len(report["combos_ready"]), 1)
+        self.assertEqual(report["combos_missing"], [])
+
+
+class CounterTests(unittest.TestCase):
+    """对策卡按威胁归类, 每类 1~2 张即可."""
+
+    def test_counter_coverage_groups_by_threat(self):
+        st = GameState.parse(state(WHIRL, ("闪电霹雳", "对所有敌人造成4点伤害。")))
+        report = deck_report(st)
+        self.assertIn("多敌", report["counter_coverage"])
+        self.assertGreaterEqual(len(report["counter_coverage"]["多敌"]), 2)
+
+    def test_prompt_mentions_combo_and_counter_rules(self):
+        prompt = character_prompt(GameState.parse(state(STRIKE)))
+        self.assertIn("组合优先", prompt)
+        self.assertIn("对策卡", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
