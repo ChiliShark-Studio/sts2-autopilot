@@ -224,5 +224,25 @@ class CampfirePromptTests(unittest.TestCase):
         self.assertEqual(BuildFlowTool().decide(request(self.REST, "rest_site")).action.index, 1)
 
 
+class TransitionFrameTests(unittest.TestCase):
+    """奖励界面正在关闭时的空帧不能被当成模型失败."""
+
+    def test_empty_rewards_without_proceed_waits(self):
+        from unittest.mock import Mock
+
+        from brain.llm import make_mock_client
+
+        client = make_mock_client({})
+        client.json_chat = Mock(return_value={"choice": -1})
+        tool = BuildFlowTool(client)
+        raw = {"state_type": "rewards",
+               "rewards": {"items": [], "can_proceed": False},
+               "player": {"hp": 40, "max_hp": 80}}
+        decision = tool.decide(request(raw, "rewards"))
+        self.assertIsNone(decision.action)
+        self.assertEqual(decision.source.value, "none")
+        client.json_chat.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

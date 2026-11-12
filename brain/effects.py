@@ -31,6 +31,13 @@ _NO_BLOCK_TURNS = re.compile(r"接下来的\s*(\d+)\s*回合内无法再从卡�
 _HP_COST = re.compile(r"失去\s*(\d+)\s*点生命")
 # 覆甲: "获得4层覆甲。" 回合结束时按层数获得格挡.
 _PLATED = re.compile(r"获得\s*(\d+)\s*层覆甲")
+# 后续回合的固定收益: "在接下来的2个回合开始时，获得5点格挡。"
+_FUTURE_BLOCK = re.compile(r"接下来的\s*(\d+)\s*个回合开始时[^。]*?获得\s*(\d+)\s*点格挡")
+# 随机消耗: "随机消耗1张牌。" 无法选择烧哪张, 只能决定要不要冒这个险.
+_RANDOM_EXHAUST = re.compile(r"随机消耗\s*(\d+)\s*张牌")
+# 每回合开始的效果 (绯红披风): "在你的回合开始时，失去1点生命并获得8点格挡。"
+_PER_TURN_BLOCK = re.compile(
+    r"回合开始时[^。]*?失去\s*(\d+)\s*点生命[^。]*?获得\s*(\d+)\s*点格挡")
 # 药水描述会把"给予所有敌人 N 层"写成整句, 数字前允许有其他词.
 _BIND_VULN = re.compile(r"(\d+)\s*层易伤")
 _BIND_WEAK = re.compile(r"(\d+)\s*层虚弱")
@@ -136,6 +143,13 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     # 能量在描述里可能写成图标 (energy_icon), 因此两种写法都要认.
     per_turn = "回合开始时" in desc and ("能量" in desc or "energy_icon" in desc)
     energy_now = 0 if per_turn else (_field(card, "energy", _ENERGY) or desc.count("energy_icon"))
+    future = _FUTURE_BLOCK.search(desc)
+    future_block_turns = _int(future.group(1)) if future else 0
+    future_block_per_turn = _int(future.group(2)) if future else 0
+    # 每回合开始的格挡 (绯红披风): 不是打出时获得, 因此不计入当回合 block.
+    per_turn_block_match = _PER_TURN_BLOCK.search(desc)
+    per_turn_hp_cost = _int(per_turn_block_match.group(1)) if per_turn_block_match else 0
+    per_turn_block = _int(per_turn_block_match.group(2)) if per_turn_block_match else 0
 
     damage = _field(card, "damage", _DAMAGE)
     block = _field(card, "block", _BLOCK)
@@ -160,7 +174,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "can_play": bool(card.get("can_play", True)),
         "damage": damage,
         "hits": hits,
-        "block": block,
+        # 每回合效果的格挡不是即时格挡; 没有这层区分会把它当成"打出时获得".
+        "block": 0 if per_turn_block else block,
         "vulnerable": _field(card, "vulnerable", _VULN),
         "weak": _field(card, "weak", _WEAK),
         "draw": _field(card, "draw", _DRAW),
@@ -173,6 +188,14 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "hp_cost": _first(_HP_COST, desc),
         # 覆甲: 回合结束时按层数获得格挡.
         "plated": _first(_PLATED, desc),
+        # 后续回合的格挡 (坚韧之环): 回合数与每回合格挡分开记, 由搜索按剩余回合折算.
+        "future_block_turns": future_block_turns,
+        "future_block_per_turn": future_block_per_turn,
+        # 随机消耗 (未升级的坚毅): 可能烧掉手牌里的核心牌, 需要计入代价.
+        "random_exhaust": _first(_RANDOM_EXHAUST, desc),
+        # 每回合开始的格挡与其生命代价 (绯红披风).
+        "per_turn_block": per_turn_block,
+        "per_turn_hp_cost": per_turn_hp_cost,
         # 能力牌 (如燃烧) 的数值只在描述里: "获得2点力量。"
         # Mod 尚未输出结构化字段, 因此这里始终尝试解析, 否则能力牌在模拟中等同空过.
         "strength": _field(card, "strength", _STRENGTH_GAIN),

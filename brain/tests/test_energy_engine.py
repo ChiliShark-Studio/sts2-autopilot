@@ -59,18 +59,55 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(decision.action.kind, "play_card")
         self.assertEqual(decision.action.card.name, "薪火之源")
 
-    def test_lethal_still_wins_over_engine(self):
-        # 敌人只剩 6 血: 应该直接斩杀, 而不是先铺能量引擎.
+    def test_lethal_still_happens_this_turn(self):
+        # 敌人只剩 6 血: 本回合必须斩杀 (顺序可以是先铺引擎再补刀).
         decision = decide_state(state(hand=[PYRE, {"index": 1, "name": "打击", "cost": "1",
                                                    "damage": 6, "hits": 1,
                                                    "target_type": "AnyEnemy"}],
                                       enemy_hp=6))
-        self.assertEqual(decision.action.card.name, "打击")
+        self.assertIn("斩杀", decision.reason)
 
     def test_cannot_play_without_enough_energy(self):
         # 2 费牌在 1 能量时不可打出, 搜索应结束回合而不是硬打.
         decision = decide_state(state(hand=[PYRE], enemy_hp=60, energy=1))
         self.assertNotEqual(decision.action.kind, "play_card")
+
+
+class FutureBlockTests(unittest.TestCase):
+    """坚韧之环: 2 费, 现在 5 格挡 + 之后两回合各 5 格挡."""
+
+    RING = {
+        "index": 0, "id": "TORIC_TOUGHNESS", "name": "坚韧之环", "type": "Skill",
+        "cost": "2", "block": 5,
+        "description": "获得5点格挡。 在接下来的2个回合开始时，获得5点格挡。",
+        "target_type": "Self", "can_play": True,
+    }
+
+    def test_parse_reads_future_block(self):
+        parsed = parse_card(self.RING)
+        self.assertEqual(parsed["block"], 5)
+        self.assertEqual(parsed["future_block_turns"], 2)
+        self.assertEqual(parsed["future_block_per_turn"], 5)
+
+    def test_future_block_adds_value(self):
+        parsed = GameState.parse(state(hand=[self.RING], enemy_hp=120))
+        sim = _Sim.build(parsed.player, parsed.battle)
+        self.assertTrue(sim.play(0, None))
+        self.assertGreater(sim.future_value, 0)
+
+    def test_played_when_fight_is_long_and_block_matters(self):
+        hand = [self.RING,
+                {"index": 1, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+                 "target_type": "AnyEnemy"}]
+        decision = decide_state(state(hand=hand, enemy_hp=120, hp=40, incoming=12))
+        self.assertEqual(decision.action.card.name, "坚韧之环")
+
+    def test_not_played_when_enemy_is_almost_dead(self):
+        hand = [self.RING,
+                {"index": 1, "name": "打击", "cost": "1", "damage": 6, "hits": 1,
+                 "target_type": "AnyEnemy"}]
+        decision = decide_state(state(hand=hand, enemy_hp=6, hp=40, incoming=12))
+        self.assertEqual(decision.action.card.name, "打击")
 
 
 if __name__ == "__main__":

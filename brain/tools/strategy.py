@@ -28,11 +28,14 @@ class StrategyContext:
     # 开局规划出的路线, 每项是 (col, row); 为空表示需要在当前节点重新规划.
     route: tuple[tuple[int, int], ...] = ()
     route_note: str = ""
+    # 本局已购买的删牌服务次数: 删牌价格随次数上涨.
+    removals: int = 0
 
     def reset(self) -> None:
         self.plan = ""
         self.route = ()
         self.route_note = ""
+        self.removals = 0
 
 
 def character_prompt(state: GameState) -> str:
@@ -61,6 +64,16 @@ def character_prompt(state: GameState) -> str:
     return f"当前角色：{character or '未知'}。尚无该角色专用攻略，只按状态中的实际效果分析配合，不套用铁甲战士策略。"
 
 
+def removal_price(ascension: int, removals: int) -> int:
+    """商店删牌服务的下一次价格.
+
+    规则 (Spire Codex 商店机制): A0-5 为 75 + 25n; A6 起涨价,
+    起始 100、每次 +50. n 是已经买过的删牌次数.
+    """
+    base, step = (100, 50) if ascension >= 6 else (75, 25)
+    return base + step * max(0, removals)
+
+
 def situation(state: GameState, context: StrategyContext) -> dict:
     """保留桥接完整效果，避免领域模型中仅存名称或缺省值造成信息丢失。"""
     player = state.raw.get("player")
@@ -69,6 +82,11 @@ def situation(state: GameState, context: StrategyContext) -> dict:
         "player": player if isinstance(player, dict) else asdict(state.player),
         "map": state.raw.get("map"),
         "scene": state.raw.get(state.screen.value),
+        # 商店相关: 删牌价格随已删次数上涨, 规划路线时要用估算价而不是固定 75.
+        "shop": {
+            "removals_bought": context.removals,
+            "next_removal_price": removal_price(state.run.ascension, context.removals),
+        },
         "previous_build_plan": context.plan,
         "simulation_available": False,
     }

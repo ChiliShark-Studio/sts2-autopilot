@@ -74,6 +74,10 @@ _SHRINK = {"缩小", "shrink", "SHRINK_POWER"}
 _NO_BLOCK = {"不可格挡", "no block", "NO_BLOCK_POWER"}
 # 昏眩 (仪式兽): 本回合只能打出 1 张牌.
 _RINGING = {"昏眩", "ringing", "RINGING_POWER"}
+# 幻象 (寄生惧魔): 死亡时下回合满血复活, 打它等于白打.
+_REVIVES = {"幻象", "illusion", "ILLUSION_POWER"}
+# 爪牙: 领导者死亡时放弃战斗, 因此击杀首领等于结束战斗.
+_MINION = {"爪牙", "minion", "MINION_POWER"}
 # 方案终点会死亡时的惩罚分, 让搜索优先选择活下来的打法.
 LETHAL_PENALTY = 1000.0
 # 每回合额外获得 1 点能量大约值多少分 (约等于一张基础攻击牌的伤害).
@@ -81,6 +85,32 @@ ENERGY_VALUE = 6.0
 # 估计战斗还剩几回合: 按敌方总血量每 20 点一回合, 限制在 1~5 回合.
 HP_PER_TURN = 20
 MAX_FUTURE_TURNS = 5
+# 击杀一个敌人除了扣掉剩余血量, 还免除了它之后几回合的输出.
+# 按本回合伤害乘这个系数估算, 不按血量估, 否则"打死 6 血小怪"会被低估.
+KILL_FUTURE_TURNS = 2
+# 不攻击的敌人也占一个身体, 按最低这么多伤害折算.
+KILL_MIN_INCOMING = 4
+
+
+def _card_value(card: Card) -> float:
+    """一张手牌的战斗价值, 用于估算"被烧掉"的损失.
+
+    不能打出的一次性状态牌 (伤口等) 价值为 0, 烧掉它们等于白赚.
+    """
+    if not card.can_play:
+        return 0.0
+    value = card.damage * card.hits + card.block * 0.9
+    value += card.vulnerable * 3 + card.weak * 2 + card.draw * 2 + card.energy * 3
+    value += card.strength * 4 + card.dexterity * 3 + card.plated * 2
+    return value
+
+
+def _random_exhaust_cost(hand: list[Card], count: int) -> float:
+    """随机消耗 count 张手牌的期望损失: 按剩余手牌的平均价值估."""
+    if not hand or count <= 0:
+        return 0.0
+    average = sum(_card_value(c) for c in hand) / len(hand)
+    return average * count
 
 
 def _power(powers: dict[str, int], aliases: set[str]) -> int:
@@ -118,6 +148,10 @@ class _Enemy:
     weak: int = 0
     # 状态能力层数 (按 id), 供敌人机制规则读取, 例如仪式兽的 PLOW_POWER.
     powers: dict[str, int] = field(default_factory=dict)
+    # 幻象: 死亡后下回合满血复活, 打它的伤害不算战果.
+    revives: bool = False
+    # 爪牙: 领导者死亡后离场.
+    is_minion: bool = False
     # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
     slippery: int = 0
     # 无实体: 每次命中的伤害上限为 1.
@@ -188,6 +222,8 @@ class _Sim:
                     slippery=_power(e.powers, _SLIPPERY),
                     intangible=_power(e.powers, _INTANGIBLE) > 0,
                     powers=dict(e.powers),
+                    revives=_power(e.powers, _REVIVES) > 0,
+                    is_minion=_power(e.powers, _MINION) > 0,
                 )
                 for e in battle.alive_enemies
             ],
@@ -260,6 +296,19 @@ class _Sim:
         if card.per_turn_energy:
             # 单回合搜索看不到后续收益, 按预计剩余回合折算.
             self.future_value += card.per_turn_energy * ENERGY_VALUE * self.future_turns()
+        if card.future_block_per_turn:
+            # 后续回合的格挡: 只算"之后还会打几回合", 且不超过牌上写明的回合数.
+            usable = max(0, min(card.future_block_turns, self.future_turns() - 1))
+            self.future_value += usable * card.future_block_per_turn * self.hp_weight()
+        if card.per_turn_block:
+            # 每回合开始获得格挡并付出生命 (绯红披风): 按剩余回合折算净收益.
+            turns = self.future_turns()
+            net = max(0, card.per_turn_block - card.per_turn_hp_cost)
+            self.future_value += turns * net * self.hp_weight()
+        if card.random_exhaust:
+            # 随机消耗烧掉哪张不可控: 按剩余手牌的平均价值折算期望损失.
+            # 先把能打的牌打完再打它, 手牌变少/变废时损失自然降低.
+            self.future_value -= _random_exhaust_cost(self.hand, card.random_exhaust)
         # 覆甲: 回合结束时按层数获得格挡, 单回合模型按当回合可用格挡计.
         self.plated += card.plated * multiplier
         # 以生命为费用: 放血之外的掉血牌也要付这个代价.
@@ -271,6 +320,12 @@ class _Sim:
             enemy.weak += card.weak
         self.energy += card.energy
         return True
+
+    def hp_weight(self) -> float:
+        """自身 1 点生命对应的敌方生命价值, 血量越低越值钱."""
+        ratio = self.hp / self.max_hp if self.max_hp else 1.0
+        ratio = max(0.0, min(1.0, ratio))
+        return HP_WEIGHT_FULL + (HP_WEIGHT_LOW - HP_WEIGHT_FULL) * (1.0 - ratio)
 
     def future_turns(self) -> int:
         """按敌方剩余总血量粗略估计还能打几回合, 用于折算每回合收益."""
@@ -350,7 +405,9 @@ class _Sim:
 
     def value(self) -> float:
         alive = [e for e in self.enemies if e.alive]
-        if not alive:
+        # 爪牙会在首领死亡时离场, 因此首领全灭就算赢下战斗.
+        leaders = [e for e in alive if not e.is_minion]
+        if not alive or not leaders:
             return 10000.0 + self.hp * 2
 
         incoming = sum(e.incoming for e in alive)
@@ -360,9 +417,10 @@ class _Sim:
 
         ratio = self.hp / self.max_hp if self.max_hp else 1.0
         ratio = max(0.0, min(1.0, ratio))
-        hp_weight = HP_WEIGHT_FULL + (HP_WEIGHT_LOW - HP_WEIGHT_FULL) * (1.0 - ratio)
+        hp_weight = self.hp_weight()
 
-        score = -sum(e.hp for e in alive)
+        # 幻象敌人死亡后会满血复活: 打掉的血量不算战果, 否则会一直打爪牙.
+        score = -sum(e.hp for e in alive if not e.revives)
         score -= unblocked * hp_weight
         score += max(0, self.block - covered) * OVERBLOCK_WEIGHT
         score += sum(e.vulnerable for e in alive) * VULNERABLE_VALUE
@@ -402,8 +460,29 @@ class _Plan:
             score=score,
             damage_taken=damage_taken,
             hp_left=hp_left,
-            won=sim.hp > 0 and not any(e.alive for e in sim.enemies),
+            won=sim.hp > 0 and not any(e.alive and not e.is_minion for e in sim.enemies),
         )
+
+
+def _kill_bonus(before: _Sim, after: _Sim) -> float:
+    """击杀奖励: 死掉的敌人之后几回合不会再打我们.
+
+    只按剩余血量算的话, 打死一个 6 血小怪只值 6 分, 还不如打大怪一刀;
+    这里用它的本回合伤害估算后续威胁, 让"先杀掉能杀的"有正确价值.
+    """
+    bonus = 0.0
+    for i, enemy in enumerate(after.enemies):
+        if enemy.alive or i >= len(before.enemies):
+            continue
+        previous = before.enemies[i]
+        if previous.hp <= 0:
+            continue
+        # 幻象敌人下回合满血复活: 这一下不是永久战果, 不给击杀奖励.
+        if previous.revives:
+            continue
+        threat = max(previous.incoming, KILL_MIN_INCOMING) * KILL_FUTURE_TURNS
+        bonus += threat * after.hp_weight()
+    return bonus
 
 
 def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
@@ -429,6 +508,7 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
                     continue
                 sequence = seq + [(pos, target)]
                 plan = _Plan.from_sim(child, sequence)
+                plan.score += _kill_bonus(node, child)
                 if rules is not None:
                     plan.score += rules.crossing_bonus(node, child)
                 if rank(plan) > rank(best):

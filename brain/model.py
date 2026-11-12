@@ -93,6 +93,14 @@ class Card:
     hp_cost: int = 0
     # 每回合开始获得的能量 (薪火之源); 价值在后续回合.
     per_turn_energy: int = 0
+    # 后续回合的格挡 (坚韧之环): 持续回合数与每回合格挡.
+    future_block_turns: int = 0
+    future_block_per_turn: int = 0
+    # 随机消耗手牌的张数 (未升级的坚毅): 可能烧掉核心牌.
+    random_exhaust: int = 0
+    # 每回合开始的格挡与其生命代价 (绯红披风).
+    per_turn_block: int = 0
+    per_turn_hp_cost: int = 0
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -128,6 +136,11 @@ class Card:
             plated=parsed.get("plated", 0),
             hp_cost=parsed.get("hp_cost", 0),
             per_turn_energy=parsed.get("per_turn_energy", 0),
+            future_block_turns=parsed.get("future_block_turns", 0),
+            future_block_per_turn=parsed.get("future_block_per_turn", 0),
+            random_exhaust=parsed.get("random_exhaust", 0),
+            per_turn_block=parsed.get("per_turn_block", 0),
+            per_turn_hp_cost=parsed.get("per_turn_hp_cost", 0),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

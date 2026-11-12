@@ -14,6 +14,11 @@ INFECTION = DeckCard(
     description="不能被打出. 在你的回合结束时, 如果这张牌在你的手牌中, 你受到3点伤害.",
 )
 
+WOUND = DeckCard(
+    name="伤口", id="WOUND", cost=0, target="None", playable=False,
+    description="不能被打出.",
+)
+
 
 def validate_infection(params: Any) -> None:
     """只接受明确的数量和目标牌堆, 在加载文件时发现配置错误."""
@@ -79,6 +84,33 @@ def _execute_apply_ringing(fight: Fight, monster: Monster, params: dict[str, Any
     fight.ringing_pending = int(params["count"])
 
 
+def _validate_sunder(params: Any) -> None:
+    """墨影幻灵的肢解: 造成伤害, 并往弃牌堆塞伤口."""
+    if not isinstance(params, dict) or params.keys() != {"damage", "wound"}:
+        raise ValueError("sunder.params 必须且只能包含 damage 和 wound")
+    if type(params["damage"]) is not int or params["damage"] < 1:
+        raise ValueError("sunder.damage 必须是大于等于 1 的整数")
+    if type(params["wound"]) is not int or params["wound"] < 0:
+        raise ValueError("sunder.wound 必须是大于等于 0 的整数")
+
+
+def _preview_sunder(fight: Fight, monster: Monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"type": "Attack", "damage": max(0, params["damage"] + monster.strength), "hits": 1},
+        {"type": "StatusCard", "label": str(params["wound"]),
+         "description": f"将 {params['wound']} 张伤口加入你的弃牌堆。"},
+    ]
+
+
+def _execute_sunder(fight: Fight, monster: Monster, params: dict[str, Any]) -> None:
+    damage = max(0, int(params["damage"]) + monster.strength)
+    if monster.weak:
+        damage = int(damage * 0.75)
+    fight._take_damage(damage)
+    for _ in range(int(params["wound"])):
+        fight.discard.append(replace(WOUND))
+
+
 CUSTOM_INTENTS = {
     "add_infection": {
         "validate": validate_infection,
@@ -94,5 +126,10 @@ CUSTOM_INTENTS = {
         "validate": _validate_apply_ringing,
         "preview": _preview_apply_ringing,
         "execute": _execute_apply_ringing,
+    },
+    "sunder": {
+        "validate": _validate_sunder,
+        "preview": _preview_sunder,
+        "execute": _execute_sunder,
     },
 }

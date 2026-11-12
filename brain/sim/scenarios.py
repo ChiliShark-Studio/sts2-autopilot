@@ -69,12 +69,34 @@ def _ceremonial_beast() -> list[Monster]:
     )]
 
 
+def _vantom() -> list[Monster]:
+    """密林 Boss 墨影幻灵: 173 血, 固有滑溜 8.
+
+    行动循环: 墨迹(7) -> 墨水长枪(6x2) -> 肢解(26 并塞伤口) -> 准备(+2 力量).
+    滑溜 8: 接下来 8 次失去生命时, 每次只失去 1 点; 多段攻击能更快削掉层数.
+
+    数值来源: Spire Codex (173 HP, 滑溜 8, 招式 7 / 6x2 / 26 / +2 力量);
+    属于近似重建, 用于同种子下的策略对比, 不代表真实胜率.
+    """
+    return [Monster(
+        "墨影幻灵", hp=173, max_hp=173,
+        script=[
+            Intent("attack", damage=7),
+            Intent("attack", damage=6, hits=2),
+            Intent("custom", handler="sunder", params={"damage": 26, "wound": 1}),
+            Intent("buff", strength=2),
+        ],
+        entity_id="VANTOM_0", slippery=8,
+    )]
+
+
 ENCOUNTERS = {
     "nibbit": _nibbit,
     "slimes": _slimes,
     "jaw_worm": _jaw_worm,
     "lagavulin": _lagavulin,
     "ceremonial_beast": _ceremonial_beast,
+    "vantom": _vantom,
 }
 
 

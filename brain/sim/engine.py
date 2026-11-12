@@ -59,6 +59,8 @@ class Monster:
     next_phase_script: Optional[list[Intent]] = None
     # 被击晕的下一回合不行动.
     skip_next: bool = False
+    # 滑溜: 接下来 N 次失去生命时, 每次只失去 1 点.
+    slippery: int = 0
 
     @property
     def alive(self) -> bool:
@@ -232,6 +234,10 @@ class Fight:
                 dmg = max(0, card.damage + self.strength)
                 if monster.vulnerable:
                     dmg = int(dmg * 1.5)
+                # 滑溜: 每次命中只掉 1 点生命, 并消耗一层.
+                if monster.slippery > 0:
+                    dmg = 1
+                    monster.slippery -= 1
                 absorbed = min(monster.block, dmg)
                 monster.block -= absorbed
                 hit = max(0, dmg - absorbed)
@@ -406,6 +412,8 @@ class Fight:
             out.append({"id": "VULNERABLE_POWER", "name": "易伤", "amount": monster.vulnerable})
         if monster.weak:
             out.append({"id": "WEAK_POWER", "name": "虚弱", "amount": monster.weak})
+        if monster.slippery:
+            out.append({"id": "SLIPPERY_POWER", "name": "滑溜", "amount": monster.slippery})
         if monster.strength:
             out.append({"id": "STRENGTH_POWER", "name": "力量", "amount": monster.strength})
         # 额外能力: 保留 id 和数值, 供敌人机制规则读取 (如仪式兽的横冲直撞层数).

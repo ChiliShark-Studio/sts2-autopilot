@@ -347,12 +347,16 @@ class BuildFlowTool:
         decision = self._choose(
             request,
             "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。"
+            "删牌价格会随已删次数上涨（A0-5 为 75/100/125…，A6 起 100/150/200…），"
+            "按标价判断值不值，不要按固定 75 金估算。"
             "牌组还有基础打击或防御时，删牌优先于买新牌；"
             "不要为了花掉金币而买填充牌；买不起删牌或关键牌时优先攒钱。",
             candidates)
         if decision is not None:
             if isinstance(decision.action, ShopPurchase):
                 self._shop_bought = True
+                if self._is_removal(request, decision.action):
+                    self.context.removals += 1
             return decision
 
         if self._shop_bought:
@@ -382,6 +386,14 @@ class BuildFlowTool:
 
         self._shop_bought = False
         return Decision(action=Proceed(), reason="没有值得买的，离开", source=Source.SCRIPT, tool=self.name)
+
+    def _is_removal(self, request: DecisionRequest, action) -> bool:  # noqa: ANN001
+        """判断这次购买是不是删牌服务 (用于累计涨价次数)."""
+        index = getattr(action, "index", None)
+        for item in (request.state.raw.get("shop") or {}).get("items") or []:
+            if isinstance(item, dict) and item.get("index") == index:
+                return item.get("category") == "card_removal"
+        return False
 
     def _bundle(self, request: DecisionRequest) -> Decision:
         """选择总价值最高的卡牌包, 然后确认."""
@@ -444,6 +456,10 @@ class BuildFlowTool:
                       and not (r.type == "card" and self._pending_card_open)]
         if can_proceed:
             candidates.append((-1, Proceed(), {"说明": "放弃剩余奖励并离开"}))
+        if not candidates:
+            # 奖励列表已清空且继续不可用: 这是界面切换中的过渡帧, 等待下一帧,
+            # 不能当成"模型没给决策"而中止整局.
+            return WAIT
         incoming = [raw_items.get(r.index, asdict(r)) for r in items if r.type == "potion"]
         if potions_full and incoming and player.max_potion_slots > 0:
             for potion in player.potions:
