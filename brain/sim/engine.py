@@ -68,10 +68,35 @@ class Monster:
     slow: int = 0
     # 领地: 自己回合结束时获得 X 点力量 (多尼斯异鸟).
     territorial: int = 0
+    # 硬化外壳: 每回合最多失去这么多生命; 0 表示没有上限.
+    # 状态 (HARDENED_SHELL_POWER) 给的是本回合剩余额度, 这里同时保存上限供新回合重置.
+    hp_loss_cap: int = 0
+    hp_loss_left: int = 0
+
+    def __post_init__(self) -> None:
+        # 从场景文件按上限构造时, 第一回合的额度也要跟着满上.
+        if not self.hp_loss_left:
+            self.hp_loss_left = self.hp_loss_cap
 
     @property
     def alive(self) -> bool:
         return self.hp > 0
+
+    def lose_hp(self, amount: int) -> int:
+        """扣血并返回实际失去的生命, 超过每回合上限的部分不生效.
+
+        证据: 真实对局 logs/run-20261114-044556.jsonl 的鬼祟珊瑚群 (75 血)
+        带 HARDENED_SHELL_POWER 20, 说明为"每回合失去的生命值不会超过20点";
+        每回合额度从 20 开始, 按实际掉血递减, 回合结束重置.
+        """
+        if amount <= 0 or self.hp <= 0:
+            return 0
+        if self.hp_loss_cap > 0:
+            # 上限存在时 0 表示"本回合额度已用完", 不能当成没有上限.
+            amount = min(amount, max(0, self.hp_loss_left))
+            self.hp_loss_left -= amount
+        self.hp -= amount
+        return amount
 
     def intent(self) -> Intent:
         if self.skip_next:
@@ -193,7 +218,9 @@ class Fight:
                  hp: int = 70, max_hp: int = 70, max_energy: int = 3,
                  draw_per_turn: int = 5, seed: int = 0, energy: Optional[int] = None,
                  block: int = 0, strength: int = 0, dexterity: int = 0,
-                 following_phases: Optional[list[list[Monster]]] = None) -> None:
+                 following_phases: Optional[list[list[Monster]]] = None,
+                 starting_hand: Optional[list[DeckCard]] = None,
+                 relic_first_block_double: bool = False) -> None:
         self.hp = hp
         self.max_hp = max_hp
         self.max_energy = max_energy
@@ -208,10 +235,23 @@ class Fight:
         self.rng = random.Random(seed)
         self.seed = seed
         self.turn = 1
+        # 臂甲: 每场战斗第一次从牌获得格挡时翻倍 (只触发一次, 不按回合重置).
+        self.relic_first_block_double = relic_first_block_double
+        self.relic_first_block_used = False
 
         self.draw_pile: list[DeckCard] = list(deck)
-        self.rng.shuffle(self.draw_pile)
         self.hand: list[DeckCard] = []
+        # 录像场景可以给定"当前手牌", 这时先摘掉这些牌, 首回合不再额外抽牌.
+        self._prefilled_hand = False
+        if starting_hand:
+            self.hand = list(starting_hand)
+            for card in starting_hand:
+                for i, candidate in enumerate(self.draw_pile):
+                    if candidate == card:
+                        self.draw_pile.pop(i)
+                        break
+            self._prefilled_hand = True
+        self.rng.shuffle(self.draw_pile)
         self.discard: list[DeckCard] = []
         self.cards_played = 0
         self.damage_taken = 0
@@ -269,7 +309,13 @@ class Fight:
         # 缓慢在回合结束时清零.
         for monster in self.monsters:
             monster.slow = 0
-        self._draw(self.draw_per_turn)
+            # 硬化外壳: 每回合的掉血额度在新回合重新给满.
+            monster.hp_loss_left = monster.hp_loss_cap
+        if self._prefilled_hand:
+            # 场景给定的是"当前这回合"的手牌, 不再补抽.
+            self._prefilled_hand = False
+        else:
+            self._draw(self.draw_per_turn)
 
     # -- 动作处理 --
     def play(self, hand_index: int, target: Optional[str] = None) -> bool:
@@ -339,8 +385,8 @@ class Fight:
                         dmg = int(dmg * (1 + 0.1 * monster.slow))
                     absorbed = min(monster.block, dmg)
                     monster.block -= absorbed
-                    hit = max(0, dmg - absorbed)
-                    monster.hp -= hit
+                    # 硬化外壳会截断本回合的总掉血; 超出额度的伤害不生效.
+                    hit = monster.lose_hp(max(0, dmg - absorbed))
                     dealt += hit
                 # 受伤后可能触发敌人的击晕/阶段切换 (例如仪式兽).
                 monster.on_damaged(dealt)
@@ -348,15 +394,22 @@ class Fight:
         if card.block > 0:
             gain = max(0, card.block + self.dexterity)
             # 不可动摇: 每回合第一次从牌获得格挡时翻倍.
+            doubled = False
             if self.double_first_block and not self.first_block_used:
-                gain *= 2
                 self.first_block_used = True
+                doubled = True
+            # 臂甲: 每场战斗只触发一次.
+            if self.relic_first_block_double and not self.relic_first_block_used:
+                self.relic_first_block_used = True
+                doubled = True
+            if doubled:
+                gain *= 2
             self.block += gain
             # 主宰: 每次获得格挡时对敌人造成伤害.
             if self.juggernaut:
                 for enemy in self.monsters:
                     if enemy.alive:
-                        enemy.hp -= self.juggernaut
+                        enemy.lose_hp(self.juggernaut)
 
         # 能力牌: 打出后持续生效.
         if definition is not None:
@@ -575,6 +628,10 @@ class Fight:
             out.append({"id": "SLOW_POWER", "name": "缓慢", "amount": monster.slow * 10})
         if monster.strength:
             out.append({"id": "STRENGTH_POWER", "name": "力量", "amount": monster.strength})
+        if monster.hp_loss_cap > 0:
+            # 导出本回合剩余额度, 与游戏状态一致 (每回合重置为上限).
+            out.append({"id": "HARDENED_SHELL_POWER", "name": "硬化外壳",
+                        "amount": monster.hp_loss_left})
         # 额外能力: 保留 id 和数值, 供敌人机制规则读取 (如仪式兽的横冲直撞层数).
         for power_id, amount in monster.powers.items():
             out.append({"id": power_id, "name": power_id, "amount": amount})

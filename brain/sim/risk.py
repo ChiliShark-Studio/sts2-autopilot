@@ -39,6 +39,9 @@ class EliteAssessment:
     """本幕精英的模拟结果, 按最坏情况汇总."""
 
     risks: list[EliteRisk] = field(default_factory=list)
+    # 本场景会出现、但模拟器还没有重建的精英. 有它们在就不能断言"安全":
+    # 只模拟一部分精英等于低估最坏情况.
+    unmodeled: list[str] = field(default_factory=list)
 
     @property
     def worst_win_rate(self) -> float:
@@ -50,8 +53,8 @@ class EliteAssessment:
 
     @property
     def safe(self) -> bool:
-        """最坏情况能赢, 且打完还留得下继续走路的血."""
-        return bool(self.risks) and self.worst_win_rate >= 0.5
+        """最坏情况能赢, 且不存在没模拟到的精英."""
+        return bool(self.risks) and not self.unmodeled and self.worst_win_rate >= 0.5
 
     def affordable(self, hp: int, margin: int = SAFETY_MARGIN) -> bool:
         """掉血后还能留出 margin 的血才值得打."""
@@ -62,17 +65,22 @@ class EliteAssessment:
             "worst_win_rate": round(self.worst_win_rate, 2),
             "worst_damage": self.worst_damage,
             "safe": self.safe,
+            "unmodeled": list(self.unmodeled),
             "by_elite": [r.to_dict() for r in self.risks],
         }
 
 
 def assess(deck: list[DeckCard], hp: int, max_hp: int, act: int, *,
-           runs: int = 3, seed: int = 0) -> EliteAssessment:
-    """按本幕所有可能的精英各跑 ``runs`` 局, 返回逐精英结果."""
+           boss_id: str = "", runs: int = 3, seed: int = 0) -> EliteAssessment:
+    """按本幕本场景所有可能的精英各跑 ``runs`` 局, 返回逐精英结果.
+
+    ``boss_id`` 用于判定场景 (第一幕有密林 / 暗港两个场景, 精英池不同).
+    """
     result = EliteAssessment()
-    for encounter in scenarios.ELITES_BY_ACT.get(act, ()):
+    for encounter in scenarios.elites_for(act, boss_id):
         monsters_factory = scenarios.ENCOUNTERS.get(encounter)
         if monsters_factory is None:
+            result.unmodeled.append(encounter)
             continue
         fights = [
             run_fight(deck, monsters_factory(), seed=seed + i, hp=hp, max_hp=max_hp)

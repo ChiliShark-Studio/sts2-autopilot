@@ -15,7 +15,7 @@ from brain.model import GameState
 from brain.build.flow import BuildFlowTool
 from brain.map.router import MapRouterTool
 from brain.strategy.context import StrategyContext
-from brain.strategy.prompts import character_prompt
+from brain.strategy.prompts import NEOW_GUIDE, character_prompt, event_prompt
 from brain.tests.test_build_flow import REWARD_STATE, request
 from brain.tests.test_map_router import MAP
 
@@ -200,6 +200,46 @@ class StrategyFlowTests(unittest.TestCase):
         self.assertEqual(tool.decide(request(raw, "relic_select")).action.kind, "select_relic")
         raw["relic_select"]["can_skip"] = True
         self.assertEqual(tool.decide(request(raw, "relic_select")).action.kind, "skip_relic_selection")
+
+
+class NeowPromptTests(unittest.TestCase):
+    """涅奥开局选项分级只在涅奥事件里出现, 不污染每步提示词."""
+
+    def test_guide_is_injected_for_neow_event_only(self):
+        neow = {"state_type": "event",
+                "event": {"event_id": "NEOW", "event_name": "涅奥",
+                          "options": [{"index": 0, "title": "金色珍珠"}, {"index": 1, "title": "卷轴箱"}]}}
+        self.assertEqual(event_prompt(GameState.parse(neow)), NEOW_GUIDE)
+        client = client_with({"choice": 1})
+        decision = BuildFlowTool(client).decide(request(neow, "event"))
+        self.assertIs(decision.source, Source.LLM)
+        self.assertIn("涅奥开局选项优先级", client.json_chat.call_args.args[0])
+
+        other = {"state_type": "event",
+                 "event": {"event_id": "TRUTH_TABLET", "event_name": "真理石板",
+                           "options": [{"index": 0, "title": "升级"}, {"index": 1, "title": "离开"}]}}
+        self.assertEqual(event_prompt(GameState.parse(other)), "")
+        client = client_with({"choice": 1})
+        BuildFlowTool(client).decide(request(other, "event"))
+        self.assertNotIn("涅奥开局选项优先级", client.json_chat.call_args.args[0])
+
+    def test_guide_is_not_repeated_in_character_prompt(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertNotIn("涅奥开局选项优先级", prompt)
+
+    def test_guide_ranks_transition_before_ceiling_and_flags_scroll_box(self):
+        # 卷轴箱此前被选中并塞入铁斩波: 分级里必须标明它只是"没有更好选择才拿".
+        self.assertIn("卷轴箱", NEOW_GUIDE)
+        self.assertIn("赌运气", NEOW_GUIDE)
+        self.assertIn("过渡", NEOW_GUIDE)
+        self.assertIn("80%", NEOW_GUIDE)
+
+    def test_bundle_prompt_warns_cards_are_permanent(self):
+        bundle = {"state_type": "bundle_select",
+                  "bundle_select": {"bundles": [{"index": 0, "cards": []}, {"index": 1, "cards": []}]}}
+        client = client_with({"choice": 1})
+        BuildFlowTool(client).decide(request(bundle, "bundle_select"))
+        self.assertIn("永久加入牌组", client.json_chat.call_args.args[0])
 
 
 class StrategyContextTests(unittest.TestCase):

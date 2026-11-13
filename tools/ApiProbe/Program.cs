@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 
 // Slay the Spire 2 程序集的反射探针.
 //
@@ -39,7 +39,8 @@ void DumpMembers(Type? type, string label, Func<MemberInfo, bool>? filter = null
     foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
                  .Where(m => !m.IsSpecialName))
         if (filter is null || filter(m))
-            Console.WriteLine($"  meth  {m.ReturnType.Name,-22} {m.Name}({string.Join(", ", m.GetParameters().Select(x => x.ParameterType.Name))})");
+            Console.WriteLine($"  meth  {m.ReturnType.Name,-22} {m.Name}(" +
+                              string.Join(", ", m.GetParameters().Select(x => $"{x.ParameterType.Name} {x.Name}")) + ")");
 }
 
 bool Interesting(MemberInfo m) =>
@@ -56,8 +57,20 @@ DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar"), "Dyn
 DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DamageVar"), "DamageVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.RepeatVar"), "RepeatVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.CardsVar"), "CardsVar"); DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.PowerVar`1"), "PowerVar");
 DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.BlockVar"), "BlockVar", Interesting);
 
-// DynamicVars 实际上可能定义在 AbstractModel 中.
+// 伤害预览: 找出让"卡面数字"包含玩家力量/目标易伤的正确调用.
 DumpMembers(Find("MegaCrit.Sts2.Core.Models.AbstractModel"), "AbstractModel", Interesting);
+var preview = Find("MegaCrit.Sts2.Core.Entities.Cards.CardPreviewMode");
+DumpMembers(preview, "CardPreviewMode", _ => true);
+if (preview is not null && preview.IsEnum)
+    foreach (var value in Enum.GetValues(preview))
+        Console.WriteLine($"  enum  {value} = {(int)value}");
+DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DamageVar"), "DamageVar (all)", _ => true);
+DumpMembers(Find("MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVarSet"), "DynamicVarSet (all)", _ => true);
+DumpMembers(Find("MegaCrit.Sts2.Core.Entities.Creatures.Creature"), "Creature",
+            m => m.Name.Contains("Strength", StringComparison.OrdinalIgnoreCase)
+              || m.Name.Contains("Power", StringComparison.OrdinalIgnoreCase)
+              || m.Name.Contains("Damage", StringComparison.OrdinalIgnoreCase));
+
 
 // 意图类型层次缺少文档, 因此枚举所有具体类型.
 var intentBase = Find("MegaCrit.Sts2.Core.MonsterMoves.Intents.AbstractIntent");

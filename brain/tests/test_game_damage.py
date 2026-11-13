@@ -1,7 +1,12 @@
-"""游戏自己算的伤害 (damage_by_target): 第一张牌直接用, 后续牌仍用本地模型.
+"""桥接的 ``damage_by_target`` 不完整: 不参与伤害计算.
 
-桥接对每张攻击牌、每个存活敌人调用官方预览接口
-(CardModel.UpdateDynamicVarPreview), 结果含力量/易伤/虚弱/缩小/附魔/遗物.
+真机证据 (2026-11-14 暗港精英战, data/combat/underdocks-colony-20261114.jsonl):
+玩家带 3 点力量时, 铁斩波牌面 5、卡面描述"造成8点伤害", 而 ``damage_by_target``
+仍是 5; 打击 6 / 描述 9, 熔融之拳 10 / 描述 13, 一律少掉力量那一份.
+把该字段当伤害会让模拟器每张攻击少算力量: 用 tools/replay_fight.py 回放录像时,
+6 处对不上全都正好差 3.
+
+因此搜索一律用本地模型 (含力量/易伤/虚弱/缩小/缓慢), 字段只留在状态里备查.
 """
 
 from __future__ import annotations
@@ -16,8 +21,8 @@ STRIKE = {
     "index": 0, "id": "STRIKE_IRONCLAD", "name": "打击", "type": "Attack", "cost": "1",
     "damage": 6, "damage_base": 6, "hits": 1,
     "description": "造成6点伤害。", "target_type": "AnyEnemy", "can_play": True,
-    # 游戏算出来是 9 (有力量/易伤等修正).
-    "damage_by_target": {"E_0": 9},
+    # 桥接给的数字不含玩家力量: 这里故意写成 6, 模拟器不应采用.
+    "damage_by_target": {"E_0": 6},
 }
 
 
@@ -38,57 +43,53 @@ def state(*, hand, enemy_hp=200, hp=50, energy=3, status=None, vuln=0):
     }
 
 
+STRENGTH_3 = [{"id": "STRENGTH_POWER", "name": "力量", "amount": 3}]
+
+
 class ParseTests(unittest.TestCase):
-    def test_damage_by_target_is_kept(self):
-        parsed = parse_card(STRIKE)
-        self.assertEqual(parsed["damage_by_target"], {"E_0": 9})
+    def test_field_is_kept_for_diagnostics(self):
+        self.assertEqual(parse_card(STRIKE)["damage_by_target"], {"E_0": 6})
 
     def test_missing_field_is_empty(self):
         card = {k: v for k, v in STRIKE.items() if k != "damage_by_target"}
         self.assertEqual(parse_card(card)["damage_by_target"], {})
 
 
-class FirstCardTests(unittest.TestCase):
-    def test_game_number_is_used_for_first_card(self):
-        parsed = GameState.parse(state(hand=[dict(STRIKE)]))
+class DamageTests(unittest.TestCase):
+    def test_strength_is_applied_even_when_bridge_number_is_lower(self):
+        # 桥接的 6 不含力量; 本地模型 6+3=9 才是游戏实际伤害.
+        parsed = GameState.parse(state(hand=[dict(STRIKE)], status=STRENGTH_3))
         sim = _Sim.build(parsed.player, parsed.battle)
         sim.play(0, 0)
-        self.assertEqual(sim.enemies[0].hp, 200 - 9)   # 用游戏的 9, 不是本地算的 6
+        self.assertEqual(sim.enemies[0].hp, 200 - 9)
 
-    def test_falls_back_when_bridge_is_old(self):
+    def test_missing_field_still_uses_local_model(self):
         card = {k: v for k, v in STRIKE.items() if k != "damage_by_target"}
-        parsed = GameState.parse(state(hand=[card]))
+        parsed = GameState.parse(state(hand=[card], status=STRENGTH_3))
         sim = _Sim.build(parsed.player, parsed.battle)
         sim.play(0, 0)
-        self.assertEqual(sim.enemies[0].hp, 200 - 6)   # 没有该字段时用牌面
+        self.assertEqual(sim.enemies[0].hp, 200 - 9)
 
-    def test_later_cards_use_local_model(self):
-        # 第一张用游戏的 9; 第二张牌的预览值是基于"出牌前"的状态, 不能再用.
-        hand = [dict(STRIKE, index=0), dict(STRIKE, index=1)]
-        parsed = GameState.parse(state(hand=hand, enemy_hp=200))
+    def test_vulnerable_is_applied_after_strength(self):
+        parsed = GameState.parse(state(hand=[dict(STRIKE)], status=STRENGTH_3, vuln=2))
         sim = _Sim.build(parsed.player, parsed.battle)
         sim.play(0, 0)
-        sim.play(0, 0)
-        # 第二刀走本地模型: 牌面 6 + 无力量 = 6
-        self.assertEqual(sim.enemies[0].hp, 200 - 9 - 6)
+        self.assertEqual(sim.enemies[0].hp, 200 - int(9 * 1.5))
 
-
-class ShrinkTests(unittest.TestCase):
-    def test_game_number_wins_over_local_shrink_math(self):
-        # 缩小在场时本地会算成 int(6*0.7)=4; 游戏的 9 优先.
+    def test_shrink_reduces_local_damage(self):
         parsed = GameState.parse(state(hand=[dict(STRIKE)],
                                        status=[{"id": "SHRINK_POWER", "name": "缩小",
                                                 "amount": -1}]))
         sim = _Sim.build(parsed.player, parsed.battle)
         sim.play(0, 0)
-        self.assertEqual(sim.enemies[0].hp, 200 - 9)
+        self.assertEqual(sim.enemies[0].hp, 200 - 4)   # int(6 * 0.7)
 
 
 class DecisionTests(unittest.TestCase):
-    def test_lethal_uses_game_damage(self):
-        # 敌人剩 9 血: 游戏给的 9 正好斩杀.
-        parsed = GameState.parse(state(hand=[dict(STRIKE)], enemy_hp=9))
-        decision = decide_state(state(hand=[dict(STRIKE)], enemy_hp=9))
+    def test_lethal_uses_local_damage_with_strength(self):
+        # 敌人剩 9 血, 6 点打击加 3 点力量正好斩杀.
+        raw = state(hand=[dict(STRIKE)], enemy_hp=9, status=STRENGTH_3)
+        decision = decide_state(raw)
         self.assertIn("斩杀", decision.reason)
 
 

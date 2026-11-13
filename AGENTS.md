@@ -52,7 +52,7 @@ brain/               决策层
   cli.py             命令入口（中文注释）
 tools/               ApiProbe（反射探针）、mock_llm、extract_combat
 logs/                原始日志：每步完整状态，**不入库**（1-3MB/局）
-data/combat/         从日志里抽出的战斗决策数据集，**入库**，用于调优
+scenarios/           真机战斗局面（手牌/遗物/怪物），**入库**，模拟器可直接重放
 ```
 
 ## 命令
@@ -101,31 +101,21 @@ python -m unittest discover -s brain/tests -t .     # 239 个离线测试
 | 目录 | 内容 | 入库 |
 |---|---|---|
 | `logs/*.jsonl` | 每一步的完整状态（含大量等待帧），一局 1–3 MB | ❌ ignore |
-| `data/combat/*.jsonl` | 只保留**真正做了战斗决策**的状态 + 决策 | ✅ |
+| `scenarios/*.json` | 真机**战斗局面**：手牌、遗物、牌组、怪物，模拟器可直接加载 | ✅ |
 
-从日志抽取：
+决策路径类录像（原 `data/combat/*.jsonl`）已废弃：路径本身没有复现价值，
+按局面保存才能重放与回测。抽取脚本 `tools/extract_combat.py` 仍保留，
+仅在确实需要逐决策对比时使用。
 
 ```powershell
-python tools\extract_combat.py logs data\combat
+python -m brain.cli fight --scenario scenarios\underdocks-colony-20261114.json --runs 20
 ```
 
-每条记录的形状（顶层摘要是给人看和过滤用的，完整状态在 `state` 里）：
+场景文件除牌组与怪物外，还支持：
 
-```json
-{"step": 90, "fight": "1-13", "ascension": 0, "act": 1, "floor": 13, "turn": 3,
- "enemies": [{"name": "飞蝇菌子", "hp": 49}],
- "hand": ["连续反弹", "突然一拳", "防御"],
- "energy": 3, "hp": 34, "max_hp": 70,
- "state": {...}, "decision": {"action": {...}, "reason": "..."}}
-```
-
-用途：
-
-- 离线重放：`brain.cli combat --journal data/combat/xxx.jsonl`
-- 调参对比：同一批状态跑不同参数，看决策变化
-- 回归验证：改算法后确认没有变差
-
-新增对局后跑一次抽取脚本，把新的 `data/combat/*.jsonl` 一起提交。
+- `player.hand`：当前手牌（从抽牌堆摘除，首回合不再补抽）；
+- `relics`：`starting_strength` / `starting_block` / `first_block_double`，
+  其它效果直接报错，不当作没有。
 
 ## 下一步
 

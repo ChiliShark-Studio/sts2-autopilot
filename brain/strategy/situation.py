@@ -140,7 +140,6 @@ def deck_report(state: GameState) -> dict:
         "damage_per_turn": round(damage_total * 5 / len(deck), 1),
         "missing": missing,
     }
-    return f"当前角色：{character or '未知'}。尚无该角色专用攻略，只按状态中的实际效果分析配合，不套用铁甲战士策略。"
 
 
 def removal_price(ascension: int, removals: int) -> int:

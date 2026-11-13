@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .engine import DeckCard, Intent, Monster
 
 STRIKE = DeckCard("打击", cost=1, damage=6, target="AnyEnemy")
@@ -123,6 +125,53 @@ def _byrdonis() -> list[Monster]:
     )]
 
 
+def _skulking_colony() -> list[Monster]:
+    """密林精英 鬼祟珊瑚群: 75 血, 固有硬化外壳 20.
+
+    硬化外壳 (HARDENED_SHELL_POWER): 每回合失去的生命值不超过 20 点.
+    状态里给的是当回合剩余额度, 每回合重置, 因此单回合输出超过 20 点的部分
+    完全浪费——这一条决定了它不能靠爆发速杀, 只能按回合磨.
+    行动 (真机录像里出现的三种, 出现频率不同, 此处近似成一个循环):
+    攻势 14 / 攻势 9 并 +2 力量 / 攻势 7 两段.
+    证据: logs/run-20261114-044556.jsonl 第一幕第 11 层 (75 血, 硬化外壳 20,
+    额度 20 -> 12 -> 3 后重置), 非官方导出数据, 仅用于同种子策略对比.
+    """
+    return [Monster(
+        "鬼祟珊瑚群", hp=75, max_hp=75,
+        script=[Intent("attack", damage=14),
+                Intent("attack", damage=9, strength=2),
+                Intent("attack", damage=7, hits=2)],
+        entity_id="SKULKING_COLONY_0", hp_loss_cap=20, hp_loss_left=20,
+    )]
+
+
+def _terror_eel() -> list[Monster]:
+    """暗港精英 骇鳗: 140 血 (进阶 150), 撞击 -> 撕扯 循环.
+
+    招式: 撞击 16 (进阶 18); 撕扯 3 段每段 3 (进阶 4), 附带 Vigor 6.
+    固有 Shriek 70 与 Vigor 的"下一次攻击加成"未重建, 因此结果偏乐观.
+    数值来源: Spire Codex (140 血 / 撞击 16 / 撕扯 3x3 / Shriek 70).
+    """
+    return [Monster(
+        "骇鳗", hp=140, max_hp=140,
+        script=[Intent("attack", damage=16), Intent("attack", damage=3, hits=3)],
+        entity_id="TERROR_EEL_0",
+    )]
+
+
+def _phantasmal_gardeners() -> list[Monster]:
+    """暗港精英 花园幽灵鳗: 4 只, 每只 27-32 血.
+
+    招式: 啃咬 5 / 甩动 7 / 猛晃 1 点 3 段 / 变大 +3 力量 (各自循环).
+    固有 Skittish 7 (每回合第一次被击中时获得格挡) 未重建, 结果偏乐观.
+    数值来源: Spire Codex 与 Untapped (4 只, 合计 108-128 血).
+    """
+    script = [Intent("attack", damage=5), Intent("attack", damage=7),
+              Intent("attack", damage=1, hits=3), Intent("buff", strength=3)]
+    return [Monster("花园幽灵鳗", hp=28, max_hp=28, script=list(script),
+                    entity_id=f"PHANTASMAL_GARDENER_{i}") for i in range(4)]
+
+
 def _phrog_parasite() -> list[Monster]:
     """密林精英 异蛙寄生虫: 61-64 血, 固有寄生 4.
 
@@ -147,13 +196,58 @@ ENCOUNTERS = {
     "vantom": _vantom,
     "bygone_effigy": _bygone_effigy,
     "byrdonis": _byrdonis,
+    "skulking_colony": _skulking_colony,
+    "terror_eel": _terror_eel,
+    "phantasmal_gardeners": _phantasmal_gardeners,
     "phrog_parasite": _phrog_parasite,
 }
 
-# 各幕可能的精英 (地图上只显示 "精英", 不显示是哪一只).
-ELITES_BY_ACT: dict[int, tuple[str, ...]] = {
-    1: ("bygone_effigy", "byrdonis", "phrog_parasite"),
+
+@dataclass(frozen=True)
+class Region:
+    """一个幕的落地场景: 同幕的不同场景有各自的 Boss 池和精英池.
+
+    精英只能在本场景的池子里出现, 用幕号直接汇总会把别的场景的精英算进来
+    (第一幕的密林与暗港就是这样). 场景由当前幕的 Boss id 反推, 因为状态里
+    只给了 Boss (地图节点) 而没有场景名.
+    """
+
+    act: int
+    name: str
+    bosses: tuple[str, ...]
+    elites: tuple[str, ...]
+
+
+# 来源: Spire Codex "各阶段的Boss与精英".
+REGIONS: dict[str, Region] = {
+    "overgrowth": Region(1, "密林", ("VANTOM", "CEREMONIAL_BEAST", "THE_KIN"),
+                         ("bygone_effigy", "byrdonis", "phrog_parasite")),
+    "underdocks": Region(1, "暗港",
+                         ("WATERFALL_GIANT", "SOUL_FYSH", "LAGAVULIN_MATRIARCH"),
+                         ("skulking_colony", "phantasmal_gardeners", "terror_eel")),
 }
+
+
+def region_of_boss(boss_id: str) -> str:
+    """按 Boss id 前缀反推场景; 未收录时返回空字符串."""
+    key = str(boss_id or "").upper()
+    for region_id, region in REGIONS.items():
+        if any(key.startswith(prefix) for prefix in region.bosses):
+            return region_id
+    return ""
+
+
+def elites_for(act: int, boss_id: str = "") -> tuple[str, ...]:
+    """本幕本场景会出现的精英.
+
+    场景未知时: 该幕只有一个场景才返回它的精英; 一个幕对应多个场景时宁可返回空,
+    也不能把另一个场景的精英当成可能遭遇.
+    """
+    region = REGIONS.get(region_of_boss(boss_id))
+    if region is not None and region.act == act:
+        return region.elites
+    same_act = [r for r in REGIONS.values() if r.act == act]
+    return same_act[0].elites if len(same_act) == 1 else ()
 
 
 def encounter(name: str) -> list[Monster]:

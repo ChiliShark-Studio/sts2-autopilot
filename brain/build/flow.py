@@ -34,6 +34,7 @@ from ..actions import (
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..strategy.choice import LLM_ATTEMPTS, choose, no_decision
 from ..strategy.context import StrategyContext
+from ..strategy.prompts import event_prompt
 from .scoring import _card_dict_value, card_score
 from .shop import ShopDecision
 
@@ -187,9 +188,12 @@ class BuildFlowTool:
             # 事件换页时会重建按钮, 暂时没有选项属于过渡状态.
             return WAIT
 
-        decision = self._choose(request, f"选择事件选项：{event.get('event_name', '')}。结合构筑收益和生命、金币等代价。",
-                                [(int(o.get("index", 0)), ChooseEventOption(int(o.get("index", 0))), o)
-                                 for o in options])
+        decision = self._choose(
+            request,
+            f"选择事件选项：{event.get('event_name', '')}。结合构筑收益和生命、金币等代价。"
+            + (f"\n{event_prompt(request.state)}" if event_prompt(request.state) else ""),
+            [(int(o.get("index", 0)), ChooseEventOption(int(o.get("index", 0))), o)
+             for o in options])
         if decision is not None:
             return decision
 
@@ -279,9 +283,13 @@ class BuildFlowTool:
         if not bundles:
             return WAIT
 
-        decision = self._choose(request, "选择与当前构筑配合的卡牌包。",
-                                [(int(b.get("index", 0)), SelectBundle(int(b.get("index", 0))), b)
-                                 for b in bundles])
+        decision = self._choose(
+            request,
+            "选择与当前构筑配合的卡牌包。包内的牌会永久加入牌组且不能跳过："
+            "优先补齐主线组件或高质量过渡，避开高费牌、需要前置的牌和带负面（伤口/诅咒）的牌；"
+            "三张都平庸时选最不稀释牌组的一包。",
+            [(int(b.get("index", 0)), SelectBundle(int(b.get("index", 0))), b)
+             for b in bundles])
         if decision is not None:
             return decision
 

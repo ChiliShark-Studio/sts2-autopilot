@@ -1305,12 +1305,19 @@ public static partial class McpMod
         // 游戏自己算出的伤害: 逐个存活敌人调用官方预览接口,
         // 这样力量/易伤/虚弱/缩小/附魔/遗物全部由游戏计算, 客户端不用再拼修正.
         // 每项是"单次命中"的伤害, 多段牌由调用方乘以段数.
+        //
+        // 注意: CardModel.UpdateDynamicVarPreview(mode, target, vars) 不会跑全局修正
+        // (力量等通过 ModifyDamageAdditive / ModifyDamageMultiplicative 挂上去),
+        // 结果只有印面值. 必须逐变量调用 DamageVar.UpdateCardPreview(..., runGlobalHooks: true)
+        // 才是卡面显示的实际伤害. 证据: 2026-11-14 暗港精英战录像里玩家有 3 点力量时,
+        // 铁斩波 description 为"造成8点伤害"而该接口只给 5.
         if (enemies is { Count: > 0 } && card.Type.ToString() == "Attack")
         {
             try
             {
                 var byTarget = new Dictionary<string, object?>();
                 var counts = new Dictionary<string, int>();
+                var damageVar = card.DynamicVars.Damage;
                 foreach (var enemy in enemies)
                 {
                     if (!enemy.IsAlive) continue;
@@ -1319,11 +1326,12 @@ public static partial class McpMod
                     counts[baseId] = count + 1;
                     string entityId = $"{baseId}_{count}";
 
-                    card.UpdateDynamicVarPreview(CardPreviewMode.Normal, enemy, vars);
-                    byTarget[entityId] = VarInt(vars, "Damage");
+                    damageVar?.UpdateCardPreview(card, CardPreviewMode.Normal, enemy, true);
+                    byTarget[entityId] = damageVar?.IntValue ?? VarInt(vars, "Damage");
                 }
                 // 复原变量, 避免影响游戏自己的卡面显示.
                 card.UpdateDynamicVarPreview(CardPreviewMode.None, null!, vars);
+                if (damageVar != null) damageVar.ResetToBase();
                 state["damage_by_target"] = byTarget;
             }
             catch

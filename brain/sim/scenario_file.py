@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -73,19 +73,26 @@ class Scenario:
     phases: list[list[Monster]]
     seed: int
     max_turns: int
+    # 录像场景: 重放时可以给定"当前手牌"和"已装备遗物", 不必依赖抽牌顺序.
+    starting_hand: list[DeckCard] = field(default_factory=list)
+    relics: list[dict[str, Any]] = field(default_factory=list)
 
     def create_fight(self, seed: int) -> Fight:
         """每次使用独立敌人实例, 避免不同种子之间共享战斗状态."""
         phases = copy.deepcopy(self.phases)
-        return Fight(self.deck, phases[0], following_phases=phases[1:], seed=seed, **self.player)
+        return Fight(self.deck, phases[0], following_phases=phases[1:], seed=seed,
+                     starting_hand=copy.deepcopy(self.starting_hand) or None,
+                     **self.player)
 
 
 def load(path: Path) -> Scenario:
     """读取场景, 未支持的字段或效果直接报错, 不默默降级."""
     raw = _object(json.loads(path.read_text(encoding="utf-8-sig")),
-                  {"name", "description", "seed", "max_turns", "player", "enemies", "phases"}, "场景")
+                  {"name", "description", "seed", "max_turns", "player", "enemies", "phases",
+                   "relics"}, "场景")
     player = _object(raw.get("player"),
-                     {"hp", "max_hp", "max_energy", "energy", "block", "draw_per_turn", "status", "deck"},
+                     {"hp", "max_hp", "max_energy", "energy", "block", "draw_per_turn",
+                      "status", "deck", "hand"},
                      "player")
     hp = _int(player.get("hp"), "player.hp", 1)
     max_hp = _int(player.get("max_hp", hp), "player.max_hp", 1)
@@ -99,31 +106,69 @@ def load(path: Path) -> Scenario:
     initial.update(_status(player.get("status", []),
                            {"STRENGTH_POWER": "strength", "DEXTERITY_POWER": "dexterity"}, "player.status"))
 
-    deck = []
-    numeric = {"cost", "damage", "hits", "block", "vulnerable", "weak", "draw", "energy"}
-    for index, entry in enumerate(_items(player.get("deck"), "player.deck")):
-        where = f"player.deck[{index}]"
-        card = _object(entry, numeric | {"name", "count", "target_type", "exhaust", "cost_x", "hits_x"}, where)
-        raw_x = isinstance(card.get("cost"), str) and card["cost"].strip().upper() == "X"
-        cost_x = _bool(card.get("cost_x", False), f"{where}.cost_x") or raw_x
-        definition = find_card(str(card.get("name") or "")) if cost_x else None
-        hits_x = _bool(card.get("hits_x", bool(definition and definition.hits_x)), f"{where}.hits_x")
-        if cost_x and not hits_x:
-            raise ValueError(f"{where} 的 X 费效果尚未支持；当前只接入按 X 次重复攻击")
-        values = {key: 0 if key == "cost" and raw_x else _int(value, f"{where}.{key}", 1 if key == "hits" else 0)
-                  for key, value in card.items() if key in numeric}
-        default_target = "AnyEnemy" if any(values.get(k, 0) for k in ("damage", "weak", "vulnerable")) else "Self"
-        if definition is not None:
-            default_target = definition.simulation_fields().get("target", default_target)
-        target = _text(card.get("target_type", default_target), f"{where}.target_type")
-        if target not in {"AnyEnemy", "AllEnemies", "Self"}:
-            raise ValueError(f"{where}.target_type 暂只支持 AnyEnemy、AllEnemies 或 Self")
-        if target == "Self" and any(values.get(k, 0) for k in ("damage", "weak", "vulnerable")):
-            raise ValueError(f"{where} 的伤害和敌方负面效果必须指定 AnyEnemy")
-        template = DeckCard(name=_text(card.get("name"), f"{where}.name"), target=target,
-                            cost_x=cost_x, hits_x=hits_x,
-                            exhaust=_bool(card.get("exhaust", False), f"{where}.exhaust"), **values)
-        deck.extend([template] * _int(card.get("count", 1), f"{where}.count", 1))
+    numeric = {"cost", "damage", "hits", "block", "vulnerable", "weak", "draw", "energy",
+               # 能力牌: 打出时立即获得的力量 (燃烧).
+               "strength"}
+
+    def cards(entries: Any, where: str) -> list[DeckCard]:
+        """把 JSON 里的卡牌条目解析成模拟器的牌 (deck 与 hand 共用同一套字段)."""
+        out: list[DeckCard] = []
+        for index, entry in enumerate(_items(entries, where)):
+            location = f"{where}[{index}]"
+            card = _object(entry, numeric | {"name", "count", "target_type", "exhaust",
+                                             "cost_x", "hits_x"}, location)
+            raw_x = isinstance(card.get("cost"), str) and card["cost"].strip().upper() == "X"
+            cost_x = _bool(card.get("cost_x", False), f"{location}.cost_x") or raw_x
+            definition = find_card(str(card.get("name") or "")) if cost_x else None
+            hits_x = _bool(card.get("hits_x", bool(definition and definition.hits_x)),
+                           f"{location}.hits_x")
+            if cost_x and not hits_x:
+                raise ValueError(f"{location} 的 X 费效果尚未支持；当前只接入按 X 次重复攻击")
+            values = {key: 0 if key == "cost" and raw_x else _int(value, f"{location}.{key}",
+                                                                 1 if key == "hits" else 0)
+                      for key, value in card.items() if key in numeric}
+            default_target = ("AnyEnemy" if any(values.get(k, 0) for k in ("damage", "weak", "vulnerable"))
+                              else "Self")
+            if definition is not None:
+                default_target = definition.simulation_fields().get("target", default_target)
+            target = _text(card.get("target_type", default_target), f"{location}.target_type")
+            if target not in {"AnyEnemy", "AllEnemies", "Self"}:
+                raise ValueError(f"{location}.target_type 暂只支持 AnyEnemy、AllEnemies 或 Self")
+            if target == "Self" and any(values.get(k, 0) for k in ("damage", "weak", "vulnerable")):
+                raise ValueError(f"{location} 的伤害和敌方负面效果必须指定 AnyEnemy")
+            template = DeckCard(name=_text(card.get("name"), f"{location}.name"), target=target,
+                                cost_x=cost_x, hits_x=hits_x,
+                                exhaust=_bool(card.get("exhaust", False), f"{location}.exhaust"),
+                                **values)
+            out.extend([template] * _int(card.get("count", 1), f"{location}.count", 1))
+        return out
+
+    deck = cards(player.get("deck"), "player.deck")
+    starting_hand = cards(player["hand"], "player.hand") if "hand" in player else []
+
+    # 遗物: 只接受模拟器真的能生效的效果, 其余报错而不是当没有.
+    relics: list[dict[str, Any]] = []
+    for index, entry in enumerate(raw.get("relics") or []):
+        where = f"relics[{index}]"
+        relic = _object(entry, {"name", "description", "effects"}, where)
+        effects = _object(relic.get("effects") or {},
+                          {"starting_strength", "starting_block", "first_block_double"},
+                          f"{where}.effects")
+        applied: dict[str, Any] = {}
+        if "starting_strength" in effects:
+            value = _int(effects["starting_strength"], f"{where}.effects.starting_strength")
+            initial["strength"] = initial.get("strength", 0) + value
+            applied["starting_strength"] = value
+        if "starting_block" in effects:
+            value = _int(effects["starting_block"], f"{where}.effects.starting_block")
+            initial["block"] += value
+            applied["starting_block"] = value
+        if "first_block_double" in effects:
+            flag = _bool(effects["first_block_double"], f"{where}.effects.first_block_double")
+            initial["relic_first_block_double"] = flag
+            applied["first_block_double"] = flag
+        relics.append({"name": _text(relic.get("name"), f"{where}.name"),
+                       "description": relic.get("description", ""), "effects": applied})
 
     if ("enemies" in raw) == ("phases" in raw):
         raise ValueError("场景必须且只能定义 enemies 或 phases 之一")
@@ -179,7 +224,9 @@ def load(path: Path) -> Scenario:
             if enemy_hp > enemy_max:
                 raise ValueError(f"{where}.hp 不能超过 max_hp")
             powers = _status(enemy.get("status", []), {"STRENGTH_POWER": "strength",
-                             "VULNERABLE_POWER": "vulnerable", "WEAK_POWER": "weak"}, f"{where}.status")
+                             "VULNERABLE_POWER": "vulnerable", "WEAK_POWER": "weak",
+                             # 硬化外壳: 每回合掉血上限; 初始额度由 Monster 同步.
+                             "HARDENED_SHELL_POWER": "hp_loss_cap"}, f"{where}.status")
             monsters.append(Monster(name=_text(enemy.get("name"), f"{where}.name"), hp=enemy_hp,
                                     max_hp=enemy_max, block=_int(enemy.get("block", 0), f"{where}.block"),
                                     script=script, entity_id=entity_id, repeat=repeat,
@@ -191,4 +238,5 @@ def load(path: Path) -> Scenario:
     return Scenario(name=_text(raw.get("name"), "name"), description=description,
                     player=initial, deck=deck, phases=phases,
                     seed=_int(raw.get("seed", 0), "seed"),
-                    max_turns=_int(raw.get("max_turns", 60), "max_turns", 1))
+                    max_turns=_int(raw.get("max_turns", 60), "max_turns", 1),
+                    starting_hand=starting_hand, relics=relics)

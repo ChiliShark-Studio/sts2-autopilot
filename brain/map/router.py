@@ -288,13 +288,15 @@ class MapRouterTool:
         from ..sim.risk import assess
 
         act = state.run.act
-        if act not in scenarios.ELITES_BY_ACT:
+        # 场景由本幕 Boss 决定: 第一幕的密林与暗港精英池不同, 不能混着算.
+        boss_id = str(((state.raw.get("map") or {}).get("boss") or {}).get("id") or "")
+        if not scenarios.elites_for(act, boss_id):
             return None
         deck = deck_from_cards(list(state.player.deck))
         if not deck:
             return None
         return assess(deck, state.player.hp, state.player.max_hp, act,
-                      runs=ELITE_SIM_RUNS)
+                      boss_id=boss_id, runs=ELITE_SIM_RUNS)
 
     def _plan(self, state: GameState, map_raw: dict, options: list[dict],
               replan_reason: str = "") -> Optional[tuple[list[NodeKey], str]]:

@@ -74,6 +74,8 @@ _FRAIL = {"脆弱", "frail", "Frail", "FRAIL_POWER"}
 # 减伤状态: 第 17 层复盘暴露的两种关键效果.
 _SLIPPERY = {"滑溜", "slippery", "SLIPPERY_POWER"}
 _INTANGIBLE = {"无实体", "intangible", "INTANGIBLE_POWER"}
+# 硬化外壳: 每回合失去的生命有上限, 直接限制击杀速度.
+_HARDENED_SHELL = {"硬化外壳", "HARDENED_SHELL_POWER"}
 # 复制药水的 "本回合下一张牌额外打出一次" 效果对应此玩家状态.
 _DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
 # 会改变数值结算的玩家负面状态.
@@ -180,10 +182,29 @@ class _Enemy:
     slippery: int = 0
     # 无实体: 每次命中的伤害上限为 1.
     intangible: bool = False
+    # 硬化外壳 (鬼祟珊瑚群): 本回合最多失去这么多生命, 状态里给的是剩余额度.
+    # -1 表示没有这个能力; 0 是"额度已经用完", 两者不能混为一谈.
+    hp_loss_left: int = -1
 
     @property
     def alive(self) -> bool:
         return self.hp > 0
+
+    def lose_hp(self, amount: int) -> int:
+        """扣血并返回实际失去的生命; 有每回合上限时截断到剩余额度.
+
+        证据: 2026-11-14 真机录像 logs/run-20261114-044556.jsonl 第一幕第 11 层
+        鬼祟珊瑚群 (75 血) 带 HARDENED_SHELL_POWER 20, 说明为
+        "每回合失去的生命值不会超过20点". 录像里每回合额度都从 20 开始,
+        每打一张攻击牌按实际掉血递减 (20 -> 12 -> 3), 回合结束后重置.
+        """
+        if amount <= 0 or self.hp <= 0:
+            return 0
+        if self.hp_loss_left >= 0:
+            amount = min(amount, self.hp_loss_left)
+            self.hp_loss_left -= amount
+        self.hp -= amount
+        return amount
 
 
 @dataclass
@@ -283,6 +304,8 @@ class _Sim:
                     # 状态里的数值是百分比 (10 = 10%), 换算成层数.
                     slow=_power(e.powers, _SLOW) // 10,
                     has_slow=_has_power(e.powers, _SLOW),
+                    hp_loss_left=(_power(e.powers, _HARDENED_SHELL)
+                                  if _has_power(e.powers, _HARDENED_SHELL) else -1),
                 )
                 for e in battle.alive_enemies
             ],
@@ -334,32 +357,24 @@ class _Sim:
             for enemy in targets:
                 if not enemy.alive:
                     continue
-                # 游戏自己算好的伤害: 只在"本回合第一张牌"时等价于当前状态, 直接用.
-                # 后续牌会改变缓慢/易伤层数, 用本地模型推算.
-                game_damage = (card.damage_by_target.get(enemy.entity_id)
-                               if self.cards_played == 1 and card.damage_by_target else None)
-                if game_damage is not None:
-                    dmg = game_damage
-                else:
-                    # 条件伤害: 全身撞击用格挡, 欺凌按易伤层数, 灰烬打击按消耗数.
-                    base = self.block if card.body_slam else card.damage
-                    if card.per_vulnerable:
-                        base += card.per_vulnerable * enemy.vulnerable
-                    if card.per_exhaust:
-                        base += card.per_exhaust * self.exhausted
-                    dmg = base + self.strength
-                    # 顺序按游戏结算: 先乘自身减伤 (虚弱/缩小), 再乘目标的易伤/缓慢.
-                    # 反过来会先放大再缩水, 结果偏小 (实测重锤 34 会被算成 33).
-                    if self.weak:
-                        dmg = int(dmg * 0.75)
-                    if self.shrink:
-                        dmg = int(dmg * 0.70)
-                    if enemy.vulnerable:
-                        dmg = int(dmg * 1.5)
+                # 条件伤害: 全身撞击用格挡, 欺凌按易伤层数, 灰烬打击按消耗数.
+                base = self.block if card.body_slam else card.damage
+                if card.per_vulnerable:
+                    base += card.per_vulnerable * enemy.vulnerable
+                if card.per_exhaust:
+                    base += card.per_exhaust * self.exhausted
+                dmg = base + self.strength
+                # 顺序按游戏结算: 先乘自身减伤 (虚弱/缩小), 再乘目标的易伤/缓慢.
+                # 反过来会先放大再缩水, 结果偏小 (实测重锤 34 会被算成 33).
+                if self.weak:
+                    dmg = int(dmg * 0.75)
+                if self.shrink:
+                    dmg = int(dmg * 0.70)
+                if enemy.vulnerable:
+                    dmg = int(dmg * 1.5)
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
                 # 因此攻击牌应当留到最后打, 前置的非攻击牌会抬高后续伤害.
-                # 游戏给的数字已经包含缓慢, 不能重复乘.
-                if game_damage is None and enemy.slow:
+                if enemy.slow:
                     dmg = int(dmg * (1 + SLOW_STEP * enemy.slow))
                 # 减伤状态逐次限制命中伤害,
                 # 因此多段攻击会更快消耗滑溜层数.
@@ -370,7 +385,8 @@ class _Sim:
                     enemy.slippery -= 1
                 absorbed = min(enemy.block, dmg)
                 enemy.block -= absorbed
-                enemy.hp -= max(0, dmg) - absorbed
+                # 硬化外壳会截断本回合的总掉血, 超出的伤害等于白打.
+                enemy.lose_hp(dmg - absorbed)
 
         gain = card.block + self.dexterity if card.grants_block or card.block else 0
         if self.frail:
@@ -531,7 +547,7 @@ class _Sim:
                     enemy.slippery -= 1
                 absorbed = min(enemy.block, dmg)
                 enemy.block -= absorbed
-                enemy.hp -= max(0, dmg) - absorbed
+                enemy.lose_hp(dmg - absorbed)
 
         if eff.get("block"):
             self.block += eff["block"]

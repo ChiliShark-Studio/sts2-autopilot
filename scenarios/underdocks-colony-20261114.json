@@ -1,0 +1,55 @@
+{
+  "name": "暗港精英·鬼祟珊瑚群（真机录像 2026-11-14）",
+  "description": "2026-11-14 第一幕第 11 层阵亡战的第一回合: 铁甲战士 15/86 血、能量 3、无力量, 鬼祟珊瑚群 75 血带硬化外壳 20。手牌与遗物取自当时的桥接状态；敌人招式按录像里出现的三种近似成循环。近似项: 岩石铠甲按每回合 4 点格挡计（覆甲机制未重建）、熔融之拳按 10 伤 + 2 易伤计、邪眼按 8 格挡计。",
+  "seed": 0,
+  "max_turns": 30,
+  "player": {
+    "hp": 15,
+    "max_hp": 86,
+    "max_energy": 3,
+    "energy": 3,
+    "block": 0,
+    "deck": [
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy", "count": 5},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self", "count": 4},
+      {"name": "痛击", "cost": 2, "damage": 8, "vulnerable": 2, "target_type": "AnyEnemy"},
+      {"name": "铁斩波", "cost": 1, "damage": 5, "block": 5, "target_type": "AnyEnemy"},
+      {"name": "双重打击", "cost": 1, "damage": 5, "hits": 2, "target_type": "AnyEnemy"},
+      {"name": "岩石铠甲", "cost": 1, "block": 4, "target_type": "Self"},
+      {"name": "燃烧+", "cost": 1, "strength": 3, "target_type": "Self"},
+      {"name": "旋风斩", "cost": "X", "hits_x": true, "damage": 5, "target_type": "AllEnemies"},
+      {"name": "战栗", "cost": 1, "vulnerable": 3, "exhaust": true, "target_type": "AnyEnemy"},
+      {"name": "飞剑回旋镖", "cost": 1, "damage": 3, "hits": 3, "target_type": "AnyEnemy"},
+      {"name": "熔融之拳", "cost": 1, "damage": 10, "vulnerable": 2, "target_type": "AnyEnemy"},
+      {"name": "邪眼", "cost": 1, "block": 8, "target_type": "Self"}
+    ],
+    "hand": [
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy"},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "燃烧+", "cost": 1, "strength": 3, "target_type": "Self"},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy"}
+    ]
+  },
+  "relics": [
+    {"name": "燃烧之血", "description": "战斗结束时回复 6 点生命。", "effects": {}},
+    {"name": "卷轴箱", "description": "拾起时, 从 2 个卡牌包中选择 1 包加入牌组。", "effects": {}},
+    {"name": "臂甲", "description": "每场战斗第一次获得格挡时, 格挡翻倍。", "effects": {"first_block_double": true}}
+  ],
+  "enemies": [
+    {
+      "entity_id": "SKULKING_COLONY_0",
+      "name": "鬼祟珊瑚群",
+      "hp": 75,
+      "max_hp": 75,
+      "status": [{"id": "HARDENED_SHELL_POWER", "amount": 20}],
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "attack", "damage": 14},
+        {"type": "attack", "damage": 9, "strength": 2},
+        {"type": "attack", "damage": 7, "hits": 2}
+      ]
+    }
+  ]
+}
