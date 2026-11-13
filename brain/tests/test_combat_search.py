@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from brain.tools.combat_search import CombatSearchTool, decide_state
+from brain.combat.search import CombatSearchTool, decide_state
 
 
 def state(hp: int = 70, max_hp: int = 70, energy: int = 3, hand=None, enemy_hp: int = 20,
@@ -134,7 +134,7 @@ class PlatedArmorTests(unittest.TestCase):
 
     def test_plated_counts_as_block(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         raw = state(energy=1, enemy_hp=40, incoming=10, hand=[
             {"index": 0, "name": "岩石铠甲", "type": "Power", "cost": "1",

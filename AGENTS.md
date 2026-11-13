@@ -17,7 +17,7 @@
 | 档案 | mod 档，铁甲战士 A0，0 胜 |
 | 已覆盖界面 | 主菜单 / 地图 / 战斗 / 奖励 / 选牌（战斗内+网格）/ 篝火 / 宝箱 / 商店 / 事件 / 结算 |
 | 战斗算法 | 单回合束搜索 + 自适应血量权重，**出牌零 LLM**；仅"效果无法模拟的药水 + 本回合无解"时问模型 |
-| 敌人机制 | `enemy_rules.py` 策略表：击晕阈值从状态读取（仪式兽）、幻象爪牙、爪牙首领判定 |
+| 敌人机制 | `combat/enemy_rules.py` 策略表：击晕阈值从状态读取（仪式兽）、幻象爪牙、爪牙首领判定 |
 | 路线决策 | LLM 开局规划整条路线、分叉点重规划；删牌价格按 75+25n 估算（A6 起 100+50n） |
 | 构筑决策 | LLM 选牌、药水取舍、事件、购物 / 删牌、遗物、篝火与永久选牌；铁甲战士基础提示，真机待验证 |
 | 离线模拟 | `brain/sim/` 支持滑溜、昏眩、击晕阶段切换、塞牌；场景含仪式兽、墨影幻灵 |
@@ -42,7 +42,9 @@ brain/               决策层
   ports.py           GamePort / ToolPort
   router.py          界面 → 谁负责决策
   agents/            game 循环 + map / build / combat / select
-  tools/             map_router(LLM) / combat_search(束搜索) / build_flow / select_tool
+  cards/             卡牌子类、类型与效果声明
+  combat/            search(束搜索) / effects(结算) / enemy_rules / potion_advisor / session
+  tools/             map_router(LLM) / build_flow / select_tool
   sim/               离线战斗引擎 + 竞技场
   replay.py          JSONL 日志
   cli.py             命令入口（中文注释）

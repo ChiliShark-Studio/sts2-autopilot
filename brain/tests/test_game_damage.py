@@ -10,7 +10,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 STRIKE = {
     "index": 0, "id": "STRIKE_IRONCLAD", "name": "打击", "type": "Attack", "cost": "1",

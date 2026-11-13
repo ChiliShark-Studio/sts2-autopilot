@@ -1,0 +1,17 @@
+{
+  "character": "IRONCLAD",
+  "deck": [
+    {"name": "打击", "count": 5},
+    {"name": "防御", "count": 4},
+    "痛击"
+  ],
+  "base_energy": 3,
+  "relics": [
+    {"name": "首回合加费遗物（输入示例）", "effects": {"energy_by_turn": [1, 0, 0, 0, 0]}}
+  ],
+  "key_cards": ["痛击"],
+  "incoming_by_turn": [10, 10, 10, 10, 10],
+  "turns": 5,
+  "runs": 100,
+  "seed": 0
+}

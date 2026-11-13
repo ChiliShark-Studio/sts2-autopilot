@@ -1,8 +1,7 @@
-"""工具层: 在 ``ToolPort`` 接口后提供有依据的决策实现."""
+"""选路、构筑与选牌工具入口；战斗决策实现位于 brain.combat。"""
 
 from .build_flow import BuildFlowTool
-from .combat_search import CombatSearchTool
 from .map_router import MapRouterTool
 from .select_tool import SelectTool
 
-__all__ = ["BuildFlowTool", "CombatSearchTool", "MapRouterTool", "SelectTool"]
+__all__ = ["BuildFlowTool", "MapRouterTool", "SelectTool"]

@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim
+from brain.combat.search import _Sim
 
 # 真实数据: run-20261112-223946 里带「锋利」的重锤.
 BLUDGEON = {

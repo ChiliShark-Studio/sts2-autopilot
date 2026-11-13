@@ -9,7 +9,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 BULLY = {
     "index": 0, "id": "BULLY", "name": "欺凌", "type": "Attack", "cost": "0",

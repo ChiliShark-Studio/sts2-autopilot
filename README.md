@@ -32,7 +32,10 @@ brain/
 ├── ports.py         GamePort / ToolPort —— 两个接缝
 ├── router.py        界面 → 谁负责决策
 ├── agents/          game（循环）/ map / build / combat
-├── tools/           map_router（LLM）/ combat_search（束搜索）/ build_flow
+├── cards/           每种卡牌的子类、类型与效果声明
+├── combat/          战斗搜索 / 共享结算 / 敌人规则 / 药水顾问 / 真实战斗会话
+├── sim/             完整战斗模拟、竞技场与独立四维评估器
+├── tools/           map_router（LLM）/ build_flow / select_tool
 ├── transport.py     HTTP 桥接实现
 ├── replay.py        JSONL 日志，可离线重放
 ├── model.py         类型化状态（Card / Enemy / Battle / MapState …）
@@ -141,7 +144,7 @@ python -m brain.cli fight --deck silent --encounter nibbit --runs 20 --verbose
 调参闭环：
 
 ```powershell
-# 改 brain/tools/combat_search.py 里的 HP_WEIGHT_* / OVERBLOCK_WEIGHT
+# 改 brain/combat/search.py 里的 HP_WEIGHT_* / OVERBLOCK_WEIGHT
 python -m brain.cli fight --encounter lagavulin --runs 30   # 几秒钟出结果
 ```
 
@@ -174,7 +177,7 @@ python -m brain.cli dry
 
 战斗是完全信息、状态空间小的问题，本质是搜索；LLM 慢、贵，而且算不准
 易伤/力量的结算顺序。参考项目用 MCTS + 一个 C++ 模拟器，我们没有对应模拟器，
-所以战斗工具目前是**一回合束搜索**——接口一致，以后换实现只动 `tools/combat_search.py`。
+所以战斗工具目前是**一回合束搜索**——接口一致，以后换实现只动 `combat/search.py`。
 
 ## 存档：mod 档和原版档是分开的
 

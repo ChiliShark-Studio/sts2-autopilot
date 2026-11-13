@@ -1,4 +1,6 @@
-"""只接管真实游戏中的一场战斗, 不涉及路线选择, LLM 或奖励.
+"""真实战斗会话：供 fight-live 命令接管当前战斗，结束后返回统计并留在后续界面。
+
+负责读取状态、调用已组装的 Agent、发送动作和等待界面变化，不实现出牌算法或奖励决策。
 
 单独提供会话而不使用 ``GameAgent.run`` 的原因是:
 有时只需要算法处理当前战斗, 地图和奖励由用户自己操作.
@@ -11,10 +13,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .agents.game import GameAgent
-from .model import Screen
-from .ports import GamePort
-from .transport import BridgeError
+from ..agents.game import GameAgent
+from ..model import Screen
+from ..ports import GamePort
+from ..transport import BridgeError
 
 COMBAT_SCREENS = {Screen.COMBAT, Screen.ELITE, Screen.BOSS, Screen.HAND_SELECT, Screen.CARD_SELECT}
 

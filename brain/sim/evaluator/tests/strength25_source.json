@@ -1,0 +1,263 @@
+{
+  "deck_url": "https://www.sts2companion.com/decks/2362cab1-f1ef-4176-85aa-9d600cf018f8",
+  "author": "the_shadow_fox",
+  "shared_date": "2026-07-17",
+  "retrieved_date": "2026-11-13",
+  "rules_url": "https://spire-codex.com/api/cards?lang=zhs",
+  "version_note": "稳定版接口未返回可核实的版本号；按本次保存的效果快照模拟，不混入 beta 改版",
+  "card_ids": [
+    "STRIKE_IRONCLAD",
+    "STRIKE_IRONCLAD",
+    "STRIKE_IRONCLAD",
+    "STRIKE_IRONCLAD",
+    "STRIKE_IRONCLAD",
+    "TWIN_STRIKE",
+    "TWIN_STRIKE",
+    "PERFECTED_STRIKE",
+    "SETUP_STRIKE",
+    "POMMEL_STRIKE",
+    "POMMEL_STRIKE",
+    "EXPECT_A_FIGHT",
+    "DEFEND_IRONCLAD",
+    "DEFEND_IRONCLAD",
+    "DEFEND_IRONCLAD",
+    "DEFEND_IRONCLAD",
+    "RAGE",
+    "ULTIMATE_STRIKE",
+    "DEMON_FORM",
+    "PYRE",
+    "HELLRAISER",
+    "INFLAME",
+    "PANACHE",
+    "PROWESS",
+    "CONFLAGRATION"
+  ],
+  "upgraded_indices": [],
+  "cards": [
+    {
+      "id": "POMMEL_STRIKE",
+      "name": "剑柄打击",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成9点伤害。\n抽1张牌。",
+      "vars": {
+        "Damage": 9,
+        "Cards": 1
+      },
+      "tags": [
+        "Strike"
+      ]
+    },
+    {
+      "id": "TWIN_STRIKE",
+      "name": "双重打击",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成5点伤害两次。",
+      "vars": {
+        "Damage": 5
+      },
+      "tags": [
+        "Strike"
+      ]
+    },
+    {
+      "id": "HELLRAISER",
+      "name": "地狱狂徒",
+      "cost": 2,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "每当你抽到名字中有“打击”的牌时，对一名随机敌人打出这张牌。",
+      "vars": null,
+      "tags": null
+    },
+    {
+      "id": "PERFECTED_STRIKE",
+      "name": "完美打击",
+      "cost": 2,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成6点伤害。\n你每有一张名字中含有“打击”的牌，伤害+2。",
+      "vars": {
+        "CalculationBase": 6,
+        "ExtraDamage": 2,
+        "CalculatedDamage": 6
+      },
+      "tags": [
+        "Strike"
+      ]
+    },
+    {
+      "id": "DEMON_FORM",
+      "name": "恶魔形态",
+      "cost": 3,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "在你的回合开始时，获得2点[gold]力量[/gold]。",
+      "vars": {
+        "StrengthPower": 2,
+        "Strength": 2
+      },
+      "tags": null
+    },
+    {
+      "id": "STRIKE_IRONCLAD",
+      "name": "打击",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成6点伤害。",
+      "vars": {
+        "Damage": 6
+      },
+      "tags": [
+        "Strike"
+      ]
+    },
+    {
+      "id": "CONFLAGRATION",
+      "name": "焚烧",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AllEnemies",
+      "description": "对所有敌人造成2点伤害4次。",
+      "vars": {
+        "Damage": 2,
+        "Repeat": 4
+      },
+      "tags": null
+    },
+    {
+      "id": "INFLAME",
+      "name": "燃烧",
+      "cost": 1,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "获得2点[gold]力量[/gold]。",
+      "vars": {
+        "StrengthPower": 2,
+        "Strength": 2
+      },
+      "tags": null
+    },
+    {
+      "id": "RAGE",
+      "name": "狂怒",
+      "cost": 0,
+      "type_key": "Skill",
+      "target": "Self",
+      "description": "打出此牌后，你在这个回合内每打出一张攻击牌，获得3点[gold]格挡[/gold]。",
+      "vars": {
+        "Power": 3
+      },
+      "tags": null
+    },
+    {
+      "id": "PANACHE",
+      "name": "神气制胜",
+      "cost": 0,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "每当你在一回合内打出五张牌时，对所有敌人造成10点伤害。",
+      "vars": {
+        "PanacheDamage": 10
+      },
+      "tags": null
+    },
+    {
+      "id": "ULTIMATE_STRIKE",
+      "name": "究极打击",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成14点伤害。",
+      "vars": {
+        "Damage": 14
+      },
+      "tags": [
+        "Strike"
+      ]
+    },
+    {
+      "id": "PYRE",
+      "name": "薪火之源",
+      "cost": 2,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "在回合开始时，获得[energy:1]。",
+      "vars": {
+        "Energy": 1
+      },
+      "tags": null
+    },
+    {
+      "id": "EXPECT_A_FIGHT",
+      "name": "跃跃欲试",
+      "cost": 2,
+      "type_key": "Skill",
+      "target": "Self",
+      "description": "你的[gold]手牌[/gold]中每有一张攻击牌，就获得[energy:1]。\n你在本回合内\n不能再获得[energy:1]。",
+      "vars": {
+        "Energy": 0,
+        "CalculationBase": 0,
+        "CalculationExtra": 1
+      },
+      "tags": null
+    },
+    {
+      "id": "DEFEND_IRONCLAD",
+      "name": "防御",
+      "cost": 1,
+      "type_key": "Skill",
+      "target": "Self",
+      "description": "获得5点[gold]格挡[/gold]。",
+      "vars": {
+        "Block": 5
+      },
+      "tags": [
+        "Defend"
+      ]
+    },
+    {
+      "id": "PROWESS",
+      "name": "非凡技艺",
+      "cost": 1,
+      "type_key": "Power",
+      "target": "Self",
+      "description": "获得1点[gold]力量[/gold]。\n获得1点[gold]敏捷[/gold]。",
+      "vars": {
+        "StrengthPower": 1,
+        "Strength": 1,
+        "DexterityPower": 1,
+        "Dexterity": 1
+      },
+      "tags": null
+    },
+    {
+      "id": "SETUP_STRIKE",
+      "name": "预备打击",
+      "cost": 1,
+      "type_key": "Attack",
+      "target": "AnyEnemy",
+      "description": "造成7点伤害。\n在本回合内获得2点[gold]力量[/gold]。",
+      "vars": {
+        "Damage": 7,
+        "StrengthPower": 2,
+        "Strength": 2
+      },
+      "tags": [
+        "Strike"
+      ]
+    }
+  ],
+  "implementation_sources": [
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Models.Powers/HellraiserPower.cs",
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Models.Powers/PanachePower.cs",
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Models.Powers/RingingPower.cs",
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Models.Cards/PerfectedStrike.cs",
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Models.Cards/ExpectAFight.cs",
+    "https://github.com/zhiyue/sts2-rl-agent/blob/main/decompiled/MegaCrit.Sts2.Core.Commands/CardPileCmd.cs"
+  ]
+}

@@ -12,7 +12,7 @@ from __future__ import annotations
 import unittest
 
 from brain.model import GameState
-from brain.tools.combat_search import _Sim
+from brain.combat.search import _Sim
 
 
 def sim(*, enemy_hp=20, powers=None, hand=None, hits=1, damage=6):

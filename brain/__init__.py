@@ -6,7 +6,8 @@
     ports      GamePort / ToolPort 接口边界
     router     界面到决策单元的路由
     agents     地图 / 构筑 / 战斗决策单元及游戏循环
-    tools      map_router (LLM), combat_search (束搜索), build_flow (奖励)
+    combat     战斗搜索、共享结算、敌人规则、药水顾问与真实战斗会话
+    tools      map_router (LLM), build_flow (奖励), select_tool (选牌)
     transport  实时 HTTP 桥接
     replay     支持离线回放的 JSONL 日志
 """
@@ -15,6 +16,7 @@ __all__ = [
     "actions",
     "agents",
     "cli",
+    "combat",
     "contracts",
     "effects",
     "factory",

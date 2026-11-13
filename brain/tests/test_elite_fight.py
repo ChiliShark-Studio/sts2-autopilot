@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 
 from brain.model import GameState
-from brain.tools.combat_search import decide_state
+from brain.combat.search import decide_state
 
 FIXTURE = Path(__file__).with_name("data") / "final_fight.json"
 
@@ -58,7 +58,7 @@ class RingingTests(unittest.TestCase):
 
     def test_ringing_limits_plays_to_one_card(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         parsed = GameState.parse(self._state())
         sim = _Sim.build(parsed.player, parsed.battle)
@@ -82,7 +82,7 @@ class PotionUseTests(unittest.TestCase):
     def test_real_frame_prefers_survival(self):
         # 补上死亡惩罚后, 这一帧不会再为了打满输出而选择被打死.
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim, _plan
+        from brain.combat.search import _Sim, _plan
 
         parsed = GameState.parse(state("610"))
         sim = _Sim.build(parsed.player, parsed.battle)

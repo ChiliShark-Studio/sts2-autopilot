@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from .effects import incoming_damage, parse_card
+from .cards import CardEffect
 
 
 class Screen(str, Enum):
@@ -86,6 +87,15 @@ class Card:
     energy: int = 0
     # 能力牌提供的永久成长 (如燃烧的 +2 力量), 只在打出时生效.
     strength: int = 0
+    # 延迟成长与仅本回合生效的力量分开保存，不能当作即时永久力量。
+    per_turn_strength: int = 0
+    temporary_strength: int = 0
+    # 卡牌格挡与攻击触发的能力格挡，适用不同的敏捷修正。
+    grants_block: bool = False
+    block_per_attack: int = 0
+    energy_per_attack: int = 0
+    no_energy_gain: bool = False
+    effects: tuple[CardEffect, ...] = ()
     dexterity: int = 0
     # 覆甲: 回合结束时按层数获得格挡.
     plated: int = 0
@@ -112,6 +122,9 @@ class Card:
     hits_if_vulnerable: int = 0
     # 游戏自己算好的单次命中伤害, 按敌人 entity_id 给出 (含力量/易伤/附魔/遗物).
     damage_by_target: dict[str, int] = field(default_factory=dict)
+    # 武装升级一张手牌；升级版升级所有剩余手牌。
+    upgrade_hand: bool = False
+    upgrade_all: bool = False
     rarity: str = ""
     upgraded: bool = False
     selected: bool = False
@@ -143,6 +156,13 @@ class Card:
             draw=parsed["draw"],
             energy=parsed["energy"],
             strength=parsed.get("strength", 0),
+            per_turn_strength=parsed.get("per_turn_strength", 0),
+            temporary_strength=parsed.get("temporary_strength", 0),
+            grants_block=parsed.get("grants_block", False),
+            block_per_attack=parsed.get("block_per_attack", 0),
+            energy_per_attack=parsed.get("energy_per_attack", 0),
+            no_energy_gain=parsed.get("no_energy_gain", False),
+            effects=parsed.get("effects", ()),
             dexterity=parsed.get("dexterity", 0),
             plated=parsed.get("plated", 0),
             hp_cost=parsed.get("hp_cost", 0),
@@ -158,6 +178,8 @@ class Card:
             exhaust=parsed.get("exhaust", False),
             hits_if_vulnerable=parsed.get("hits_if_vulnerable", 0),
             damage_by_target=dict(parsed.get("damage_by_target") or {}),
+            upgrade_hand=parsed.get("upgrade_hand", False),
+            upgrade_all=parsed.get("upgrade_all", False),
             rarity=_s(d.get("rarity")),
             upgraded=bool(d.get("is_upgraded")),
             selected=bool(d.get("is_selected")),

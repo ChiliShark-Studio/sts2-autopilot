@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 BODY_SLAM = {
     "index": 0, "id": "BODY_SLAM", "name": "全身撞击", "type": "Attack", "cost": "1",
@@ -79,7 +79,7 @@ class DamageTests(unittest.TestCase):
 class DecisionTests(unittest.TestCase):
     def test_plan_uses_block_for_damage(self):
         # 有 18 格挡 + 两张防御: 最优是先垫格挡再撞, 伤害等于最终格挡.
-        from brain.tools.combat_search import _plan
+        from brain.combat.search import _plan
 
         hand = [dict(BODY_SLAM), defend(), defend(2)]
         parsed = GameState.parse(state(hand=hand, block=18, incoming=15))

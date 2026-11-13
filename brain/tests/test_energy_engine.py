@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import ENERGY_VALUE, _Sim, decide_state
+from brain.combat.search import ENERGY_VALUE, _Sim, decide_state
 
 PYRE = {
     "index": 0, "id": "PYRE", "name": "薪火之源", "type": "Power", "cost": "2",

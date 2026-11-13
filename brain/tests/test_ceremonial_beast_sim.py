@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import unittest
 
-from brain.enemy_rules import RuleBook
+from brain.combat.enemy_rules import RuleBook
 from brain.sim.arena import run_fight
 from brain.sim.scenarios import encounter, starter
-from brain.tools.combat_search import decide_state
+from brain.combat.search import decide_state
 
 
 def _deck():

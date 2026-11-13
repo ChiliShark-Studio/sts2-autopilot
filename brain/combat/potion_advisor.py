@@ -1,4 +1,6 @@
-"""战斗内药水顾问: 只处理本地无法模拟的药水效果.
+"""战斗药水模型顾问：供搜索在本回合方案必死且存在无法模拟的药水时调用。
+
+本文件只建议是否使用给定候选药水，不搜索出牌顺序，也不向游戏发送动作。
 
 抽牌药水、随机无色牌这类效果取决于牌堆顺序与随机结果, 桥接下载牌堆是按稀有度
 排序输出的, 无法还原真实抽牌顺序, 因此本地不编造收益数值.
@@ -16,7 +18,7 @@ from ..contracts import Decision, Source
 from ..effects import humanize
 from ..llm import LLMClient
 from ..model import GameState
-from .strategy import StrategyContext, situation
+from ..tools.strategy import StrategyContext, situation
 
 # 模型选择"不使用"时返回的编号.
 DECLINE = -1

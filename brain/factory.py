@@ -14,13 +14,13 @@ from .agents.combat import CombatAgent
 from .agents.game import GameAgent
 from .agents.map import MapAgent
 from .agents.select import SelectAgent
-from .enemy_rules import RuleBook
+from .combat.enemy_rules import RuleBook
 from .llm import LLMClient
 from .replay import Journal
 from .tools.build_flow import BuildFlowTool
-from .tools.combat_search import CombatSearchTool
+from .combat.search import CombatSearchTool
 from .tools.map_router import MapRouterTool
-from .tools.potion_advisor import PotionAdvisor
+from .combat.potion_advisor import PotionAdvisor
 from .tools.select_tool import SelectTool
 from .tools.strategy import StrategyContext
 from .transport import Bridge

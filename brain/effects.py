@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .cards import EffectKind, Event, card_effects, find_card
+
 # 造成 6 点伤害 / 造成3点伤害3次 / 造成 8 点伤害. 给予 2 层易伤.
 _DAMAGE = re.compile(r"造成\s*(\d+)\s*点伤害(?:[\s，,]*(\d+)\s*次)?")
 _BLOCK = re.compile(r"获得\s*(\d+)\s*点格挡")
@@ -23,6 +25,9 @@ _DRAW = re.compile(r"抽\s*(\d+)\s*张牌")
 _ENERGY = re.compile(r"获得\s*(\d+)\s*点能量")
 _HEAL = re.compile(r"回复\s*(\d+)\s*点(?:生命|最大生命值)")
 _STRENGTH_GAIN = re.compile(r"获得\s*(\d+)\s*点力量")
+_PER_TURN_STRENGTH = re.compile(r"回合开始时[^。]*?获得\s*(\d+)\s*点力量")
+_TEMPORARY_STRENGTH = re.compile(r"本回合内[^。]*?获得\s*(\d+)\s*点力量")
+_BLOCK_PER_ATTACK = re.compile(r"回合内每打出一张攻击牌[，,]?\s*获得\s*(\d+)\s*点格挡")
 # 敏捷药水: "获得2点敏捷。" 敏捷提升本回合每张牌的格挡.
 _DEXTERITY_GAIN = re.compile(r"获得\s*(\d+)\s*点敏捷")
 # 应急按钮: "你在接下来的2回合内无法再从卡牌中获得格挡."
@@ -43,6 +48,7 @@ _PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点�
 _PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
 # 拆卸: "如果该敌人有易伤状态，则攻击两次。" 命中段数取决于目标状态.
 _HITS_IF_VULNERABLE = re.compile(r"如果[^。]*?易伤[^。]*?攻击两次")
+_UPGRADE_HAND = re.compile(r"升级(?:你|你的)?手牌中的(一张|所有)牌")
 # 桥接对"条件伤害"牌会给 0, 这时回到描述里取基础伤害.
 _DAMAGE_TEXT = re.compile(r"造成\s*(\d+)\s*点伤害")
 
@@ -100,7 +106,7 @@ def parse_potion(description: str) -> dict[str, int]:
         # 复制效果: "本回合, 你打出的下一张牌会额外打出一次."
         "duplicate_next": 1 if ("额外打出一次" in desc or "打出两次" in desc) else 0,
         # 随机无色牌: "从3张随机无色牌中选择1张加入你的手牌."
-        # 具体牌未知, 模拟器用一张平均牌代替 (见 combat_search.COLORLESS_CARD_*).
+        # 具体牌未知, 模拟器用一张平均牌代替 (见 brain.combat.search.COLORLESS_CARD_*).
         "random_card": 1 if ("无色牌" in desc and "手牌" in desc) else 0,
         # 阵亡自动复活 (瓶中精灵): 生命降到 0 时改为回复最大生命值的 N%.
         # 这是被动效果, 不能主动使用, 但必须计入"这回合会不会死".
@@ -175,6 +181,19 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     per_turn_block_match = _PER_TURN_BLOCK.search(desc)
     per_turn_hp_cost = _int(per_turn_block_match.group(1)) if per_turn_block_match else 0
     per_turn_block = _int(per_turn_block_match.group(2)) if per_turn_block_match else 0
+    per_turn_strength = _first(_PER_TURN_STRENGTH, desc)
+    temporary_strength = _first(_TEMPORARY_STRENGTH, desc)
+    block_per_attack = _first(_BLOCK_PER_ATTACK, desc)
+    upgraded = bool(card.get("is_upgraded")) or str(card.get("name") or "").endswith("+")
+    definition = (find_card(str(card.get("id") or ""), upgraded=upgraded)
+                  or find_card(str(card.get("name") or ""), upgraded=upgraded))
+    if definition is not None:
+        # 桥接描述仅用于输入时读取动态数值；离线卡牌直接使用卡牌集定义。
+        per_turn_strength = per_turn_strength or definition.amount(Event.TURN_START, EffectKind.GAIN_STRENGTH)
+        block_per_attack = block_per_attack or definition.amount(Event.ATTACK_RESOLVED, EffectKind.GAIN_BLOCK)
+    energy_per_attack = int("手牌" in desc and "每有一张攻击牌" in desc
+                            and ("能量" in desc or "energy" in desc))
+    no_energy_gain = "本回合" in desc and "不能再获得" in desc and ("能量" in desc or "energy" in desc)
 
     damage = _field(card, "damage", _DAMAGE)
     block = _field(card, "block", _BLOCK)
@@ -200,6 +219,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     # 描述里的数字带上了虚弱/缩小/易伤的修正 (缩小后欺凌会显示"造成2点伤害"),
     # 按 id 用图鉴里的原始数值覆盖, 否则修正会被算两遍.
     card_id = card.get("id") or ""
+    hand_upgrade = _UPGRADE_HAND.search(desc)
+    armaments = card_id == "ARMAMENTS" or str(card.get("name") or "").rstrip("+") == "武装"
     key = f"{card_id}+" if card.get("is_upgraded") else card_id
     fixed = CONDITIONAL_BASE.get(key) or CONDITIONAL_BASE.get(card_id) or {}
     if fixed:
@@ -225,12 +246,17 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "damage": damage,
         "hits": hits,
         # 每回合效果的格挡不是即时格挡; 没有这层区分会把它当成"打出时获得".
-        "block": 0 if per_turn_block else block,
+        "block": 0 if per_turn_block or block_per_attack else block,
+        "grants_block": not (per_turn_block or block_per_attack) and (block > 0 or bool(_BLOCK.search(desc))),
+        "block_per_attack": block_per_attack,
+        "effects": card_effects(per_turn_strength=per_turn_strength, block_per_attack=block_per_attack),
         "vulnerable": _field(card, "vulnerable", _VULN),
         "weak": _field(card, "weak", _WEAK),
         "draw": _field(card, "draw", _DRAW),
         # 能量可能是结构化字段, 也可能被渲染成图标; 每个能量图标算 1 点.
         "energy": energy_now,
+        "energy_per_attack": energy_per_attack,
+        "no_energy_gain": no_energy_gain,
         # 每回合开始获得的能量 (薪火之源): 价值在后续回合, 由搜索折算.
         "per_turn_energy": (desc.count("energy_icon") or _int(card.get("energy"), 0) or 1)
         if per_turn else 0,
@@ -245,6 +271,9 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "per_exhaust": fixed.get("per_exhaust") or _first(_PER_EXHAUST, desc),
         # 目标有易伤时多打一段 (拆卸).
         "hits_if_vulnerable": 2 if _HITS_IF_VULNERABLE.search(desc) else 0,
+        "upgrade_hand": bool(hand_upgrade) or armaments,
+        "upgrade_all": bool(hand_upgrade and hand_upgrade.group(1) == "所有") or (
+            armaments and (bool(card.get("is_upgraded")) or str(card.get("name") or "").endswith("+"))),
         # 游戏算好的逐目标伤害 (新桥接提供; 旧桥接没有就留空, 由本地模型兜底).
         "damage_by_target": {
             str(k): _int(v)
@@ -262,7 +291,9 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "per_turn_hp_cost": per_turn_hp_cost,
         # 能力牌 (如燃烧) 的数值只在描述里: "获得2点力量。"
         # Mod 尚未输出结构化字段, 因此这里始终尝试解析, 否则能力牌在模拟中等同空过.
-        "strength": _field(card, "strength", _STRENGTH_GAIN),
+        "strength": 0 if per_turn_strength or temporary_strength else _field(card, "strength", _STRENGTH_GAIN),
+        "per_turn_strength": per_turn_strength,
+        "temporary_strength": temporary_strength,
         "dexterity": _field(card, "dexterity", _DEXTERITY_GAIN),
         "no_block_turns": _first(_NO_BLOCK_TURNS, desc),
         "unplayable_reason": card.get("unplayable_reason"),

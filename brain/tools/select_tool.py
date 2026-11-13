@@ -12,6 +12,7 @@ from __future__ import annotations
 from ..actions import CancelSelection, ConfirmSelection, SelectCard
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..model import Card
+from ..upgrades import choose_upgrade
 from .build_flow import card_score, discard_score
 from .strategy import LLM_ATTEMPTS, StrategyContext, choose, combat_selection, no_decision
 
@@ -84,6 +85,17 @@ class SelectTool:
                     self.name, f"模型连续 {LLM_ATTEMPTS} 次未给出有效选择")
 
         prompt = picker.prompt
+        if combat_selection(state) and any(hint in prompt for hint in UPGRADE_HINTS):
+            from ..combat.search import ENERGY_VALUE, HP_WEIGHT_FULL, HP_WEIGHT_LOW
+
+            ratio = max(0.0, min(1.0, state.player.hp_ratio))
+            weight = HP_WEIGHT_FULL + (HP_WEIGHT_LOW - HP_WEIGHT_FULL) * (1 - ratio)
+            position = choose_upgrade(unselected, weight, ENERGY_VALUE)
+            if position is not None:
+                best = unselected[position]
+                return Decision(action=self._select(state, best.index), reason=f"升级 {best.name}（已知升级增益最高）",
+                                source=Source.HEURISTIC, tool=self.name)
+
         if any(hint in prompt for hint in UPGRADE_HINTS) or any(hint in prompt for hint in KEEP_HINTS):
             best = max(unselected, key=card_score)
             return Decision(action=self._select(state, best.index), reason=f"保留/升级 {best.name}（分数最高）",

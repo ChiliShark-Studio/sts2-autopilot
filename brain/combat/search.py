@@ -1,4 +1,7 @@
-"""战斗工具: 对当前手牌进行单回合束搜索, 并判断药水使用时机.
+"""战斗动作决策：为真实游戏和离线竞技场搜索本回合的出牌及药水方案。
+
+本文件包含搜索所需的临时状态推演与评分，不负责接管游戏或运行完整场战斗。
+共享效果由 combat.effects 结算，具体卡牌规则由 cards 中的卡牌类声明。
 
 使用手写评分比较本回合合法出牌, 不使用 MCTS.
 由于缺少快速的完整 StS2 模拟器, 深层搜索会产生大量完整状态复制.
@@ -22,13 +25,17 @@
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Optional
 
 from ..actions import EndTurn, PlayCard, UsePotion
 from ..contracts import WAIT, Decision, DecisionKind, DecisionRequest, Source
+from ..cards import EffectKind, Event, capability, card_effects
+from .effects import ActiveEffect, apply_effects, emit, power_amount, read_powers
 from ..effects import parse_potion
 from ..model import Battle, Card, Player, Potion
+from ..upgrades import choose_upgrade, upgrade, upgrade_gain
 
 # 自适应血量权重: 自身 1 点生命对应的敌方生命价值.
 HP_WEIGHT_FULL = 0.4
@@ -74,6 +81,9 @@ _SHRINK = {"缩小", "shrink", "SHRINK_POWER"}
 _NO_BLOCK = {"不可格挡", "no block", "NO_BLOCK_POWER"}
 # 昏眩 (仪式兽): 本回合只能打出 1 张牌.
 _RINGING = {"昏眩", "ringing", "RINGING_POWER"}
+_NO_ENERGY_GAIN = {"不能获得能量", "NO_ENERGY_GAIN_POWER"}
+_PYRE = {"薪火之源", "PYRE_POWER"}
+_SETUP_STRENGTH = {"预备打击", "SETUP_STRIKE_POWER"}
 # 幻象 (寄生惧魔): 死亡时下回合满血复活, 打它等于白打.
 _REVIVES = {"幻象", "illusion", "ILLUSION_POWER"}
 # 爪牙: 领导者死亡时放弃战斗, 因此击杀首领等于结束战斗.
@@ -131,10 +141,12 @@ def _has_power(powers: dict[str, int], aliases: set[str]) -> bool:
 def _upgraded(card: Card) -> Card:
     """尽量准确地生成一张手牌的升级版本.
 
-    优先使用桥接提供的升级数值, 缺失时采用固定增量.
-    后续 Mod 可以通过提供准确数值改善结果, 无需修改药水逻辑.
+    优先使用桥接和已核对图鉴；未知牌的药水估计保留原有固定增量。
     """
-    if card.upgraded:
+    known = upgrade(card)
+    if known is not card:
+        return known
+    if card.upgraded or card.name.endswith("+"):
         return card
     damage = card.damage
     block = card.block
@@ -142,7 +154,7 @@ def _upgraded(card: Card) -> Card:
         damage = card.damage_up if card.damage_up is not None else damage + UPGRADE_DAMAGE_BONUS
     if block:
         block = card.block_up if card.block_up is not None else block + UPGRADE_BLOCK_BONUS
-    return replace(card, damage=damage, block=block, upgraded=True)
+    return replace(card, damage=damage, block=block, upgraded=True, damage_by_target={})
 
 
 @dataclass
@@ -204,15 +216,44 @@ class _Sim:
     no_block: bool = False
     # 本回合卡牌新增的不可格挡回合数, 需要计入负面代价.
     no_block_turns: int = 0
+    # 升级后的本回合收益直接进入结算；这里只保存用于未来一次再抽取的已知增量。
+    upgrade_pairs: list[tuple[Card, Card]] = field(default_factory=list)
+    draw_remaining: int = 0
+    future_discard_size: int = 0
+    cycle_known: bool = False
+    max_energy: int = 3
+    effect_powers: dict[str, ActiveEffect] = field(default_factory=dict)
+    temporary_strength: int = 0
+    growth_strength: int = 0
+    no_energy_gain: bool = False
+    future_energy: int = 0
+    deck_attack_density: float = 0.0
+    attack_hits: float = 0.0
+    attack_damage: float = 0.0
+    attack_cost: float = 0.0
 
     @classmethod
     def build(cls, player: Player, battle: Battle) -> "_Sim":
+        attacks = [c for c in player.deck if c.type == "attack" or c.damage or c.body_slam]
         return cls(
             hp=player.hp,
             max_hp=player.max_hp,
             block=player.block,
             energy=player.energy,
             hand=list(battle.hand),
+            draw_remaining=battle.draw_count,
+            future_discard_size=battle.discard_count + len(battle.hand) + battle.draw_count,
+            cycle_known=bool(player.deck) and len(player.deck) <= (
+                battle.draw_count + battle.discard_count + len(battle.hand) + battle.exhaust_count),
+            max_energy=player.max_energy,
+            effect_powers=read_powers(player.powers),
+            temporary_strength=_power(player.powers, _SETUP_STRENGTH),
+            no_energy_gain=_power(player.powers, _NO_ENERGY_GAIN) > 0,
+            future_energy=_power(player.powers, _PYRE),
+            deck_attack_density=len(attacks) / len(player.deck) if player.deck else 0.0,
+            attack_hits=sum(c.hits for c in attacks) / len(attacks) if attacks else 0.0,
+            attack_damage=sum(c.damage * c.hits for c in attacks) / len(attacks) if attacks else 0.0,
+            attack_cost=sum(c.cost for c in attacks) / len(attacks) if attacks else 0.0,
             revive_pct=max((parse_potion(p.description)["death_save"]
                             for p in player.potions), default=0),
             strength=_power(player.powers, _STRENGTH),
@@ -249,6 +290,10 @@ class _Sim:
 
     def clone(self) -> "_Sim":
         return copy.deepcopy(self)
+
+    @property
+    def rage(self) -> int:
+        return power_amount(self, "RAGE_POWER")
 
     def legal(self) -> list[tuple[int, Optional[int]]]:
         # 昏眩等状态会限制本回合出牌数, 达到上限后只剩结束回合.
@@ -323,7 +368,7 @@ class _Sim:
                 enemy.block -= absorbed
                 enemy.hp -= max(0, dmg) - absorbed
 
-        gain = card.block + self.dexterity
+        gain = card.block + self.dexterity if card.grants_block or card.block else 0
         if self.frail:
             gain = int(gain * 0.75)
         if self.no_block:
@@ -334,8 +379,18 @@ class _Sim:
         # 能力牌: 成长在打出之后才生效, 只影响后续打出的牌.
         # 没有这一步, 燃烧之类的牌在模拟里等于空过一张能量.
         self.strength += card.strength * multiplier
+        self.strength += card.temporary_strength * multiplier
+        self.temporary_strength += card.temporary_strength * multiplier
+        effects = card.effects or card_effects(per_turn_strength=card.per_turn_strength,
+                                               block_per_attack=card.block_per_attack)
+        self.growth_strength += capability(effects, Event.TURN_START, EffectKind.GAIN_STRENGTH) * multiplier
+        apply_effects(self, tuple(replace(e, amount=e.amount * multiplier) for e in effects))
         self.dexterity += card.dexterity * multiplier
+        if card.type == "attack" and any(e.alive for e in self.enemies):
+            for _ in range(multiplier):
+                emit(self, Event.ATTACK_RESOLVED)
         if card.per_turn_energy:
+            self.future_energy += card.per_turn_energy * multiplier
             # 单回合搜索看不到后续收益, 按预计剩余回合折算.
             self.future_value += card.per_turn_energy * ENERGY_VALUE * self.future_turns()
         if card.future_block_per_turn:
@@ -366,8 +421,62 @@ class _Sim:
         for enemy in self.enemies:
             if enemy.has_slow and enemy.alive:
                 enemy.slow += 1
-        self.energy += card.energy
+        gained = (card.energy_per_attack * sum(c.type == "attack" for c in self.hand)
+                  if card.energy_per_attack else card.energy)
+        if not self.no_energy_gain:
+            self.energy += gained
+        self.no_energy_gain = self.no_energy_gain or card.no_energy_gain
+        if card.upgrade_hand:
+            for _ in range(multiplier):
+                positions = (list(range(len(self.hand))) if card.upgrade_all else
+                             [choose_upgrade(self.hand, self.hp_weight(), ENERGY_VALUE)])
+                for position in positions:
+                    if position is None:
+                        continue
+                    before = self.hand[position]
+                    improved = upgrade(before)
+                    if improved is not before:
+                        self.hand[position] = improved
+                        self.upgrade_pairs.append((before, improved))
         return True
+
+    def strength_future(self) -> dict[str, float]:
+        """按牌组密度、基础抽牌和能量预算估算新增成长，不查看未来洗牌顺序。"""
+        detail = {"per_turn_strength": self.growth_strength, "turns": 0, "hits_per_turn": 0.0,
+                  "energy_per_turn": self.max_energy + self.future_energy, "estimate": 0.0}
+        alive = [e for e in self.enemies if e.alive and not e.is_minion]
+        if self.growth_strength <= 0 or not alive or not self.attack_hits:
+            return detail
+        attacks = min(5 * self.deck_attack_density,
+                      max(0, self.max_energy + self.future_energy) / max(1.0, self.attack_cost))
+        hits = attacks * self.attack_hits
+        permanent = max(0, self.strength - self.temporary_strength)
+        baseline = attacks * self.attack_damage + permanent * hits
+        remaining = sum(e.hp for e in alive)
+        turns = max(0, min(MAX_FUTURE_TURNS - 1, math.ceil(remaining / max(1.0, baseline)) - 1))
+        estimate = 0.0
+        for turn in range(1, turns + 1):
+            added = self.growth_strength * turn * hits
+            estimate += min(remaining, added)
+            remaining -= baseline + added
+            if remaining <= 0:
+                turns = turn
+                break
+        detail.update(turns=turns, hits_per_turn=round(hits, 3), estimate=round(estimate, 3))
+        return detail
+
+    def upgrade_future(self) -> dict[str, float]:
+        """有上限地估计之后一次再抽到升级牌的收益，不重复奖励本回合结算。"""
+        rounds = max(0, self.future_turns() - 1)
+        # 先抽完当前抽牌堆，才可能再次抽到目标；洗牌池还包含途中被抽取和弃置的牌。
+        size = max(1, self.future_discard_size - self.exhausted)
+        probability = min(1.0, max(0, rounds * 5 - self.draw_remaining) / size) if self.cycle_known else 0.0
+        gain = sum(upgrade_gain(before, after, self.hp_weight(), ENERGY_VALUE)
+                   for before, after in self.upgrade_pairs
+                   if not after.exhaust and after.type != "power" and after.cost <= self.max_energy)
+        if not any(e.alive and not e.is_minion for e in self.enemies):
+            probability = 0.0
+        return {"redraw_probability": probability, "known_gain": gain, "estimate": probability * gain}
 
     def hp_weight(self) -> float:
         """自身 1 点生命对应的敌方生命价值, 血量越低越值钱."""
@@ -473,7 +582,7 @@ class _Sim:
         score += max(0, self.block - covered) * OVERBLOCK_WEIGHT
         score += sum(e.vulnerable for e in alive) * VULNERABLE_VALUE
         score += sum(e.weak for e in alive) * WEAK_VALUE
-        score += self.strength * STRENGTH_VALUE
+        score += (self.strength - self.temporary_strength) * STRENGTH_VALUE
         score += self.dexterity * DEXTERITY_VALUE
         # 应急按钮的负面效果在后续回合生效, 这里计入代价,
         # 避免搜索将 40 点格挡视为没有额外代价.
@@ -488,6 +597,8 @@ class _Plan:
     damage_taken: int = 0
     hp_left: int = 0
     won: bool = False
+    upgrade_future: dict[str, float] = field(default_factory=dict)
+    strength_future: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_sim(cls, sim: _Sim, sequence: list[tuple[int, Optional[int]]]) -> "_Plan":
@@ -498,7 +609,9 @@ class _Plan:
             # 瓶中精灵会挡住这次死亡并把生命拉回一定比例,
             # 因此"这回合会不会死"不能只看血量归零.
             hp_left = max(1, sim.max_hp * sim.revive_pct // 100)
-        score = sim.value() + sim.future_value
+        future = sim.upgrade_future()
+        growth = sim.strength_future()
+        score = sim.value() + sim.future_value + future["estimate"] + growth["estimate"]
         if hp_left <= 0:
             # 打输出打得再漂亮, 这回合死了也没有意义:
             # 没有这一项时, 搜索会为了多打 20 点伤害而选择不格挡.
@@ -509,6 +622,8 @@ class _Plan:
             damage_taken=damage_taken,
             hp_left=hp_left,
             won=sim.hp > 0 and not any(e.alive and not e.is_minion for e in sim.enemies),
+            upgrade_future=future,
+            strength_future=growth,
         )
 
 
@@ -542,8 +657,9 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
     ``rules`` 提供敌人机制修正 (例如打到阈值会让对方少行动一回合).
     """
 
-    def rank(plan: _Plan) -> tuple[int, float]:
-        return (1 if plan.won else 0, plan.score)
+    def rank(plan: _Plan) -> tuple[bool, bool, float]:
+        # 可执行的斩杀与保命优先于任何未来估值，不能被巨额升级收益反超。
+        return (plan.won, plan.hp_left > 0, plan.score)
 
     best = _Plan.from_sim(sim, [])
     frontier = [(sim, [])]
@@ -632,8 +748,13 @@ class CombatSearchTool:
         )
         if plan.won:
             reason = f"斩杀方案: {reason}"
+        details = {}
+        if plan.upgrade_future["estimate"]:
+            details["upgrade_future"] = plan.upgrade_future
+        if plan.strength_future["estimate"]:
+            details["strength_future"] = plan.strength_future
         return self._finish(Decision(action=PlayCard(card, target), reason=reason,
-                                     source=Source.SEARCH, tool=self.name))
+                                     source=Source.SEARCH, tool=self.name, extra=details))
 
     def _ask_advisor(self, state, plan: _Plan) -> Optional[Decision]:
         """方案会死且身上有无法模拟的药水时, 让模型决定是否使用.

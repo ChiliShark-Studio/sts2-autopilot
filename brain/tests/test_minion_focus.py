@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, _plan, decide_state
+from brain.combat.search import _Sim, _plan, decide_state
 
 OBSCURA = {"entity_id": "THE_OBSCURA_0", "name": "胧光怪", "hp": 53, "max_hp": 123,
            "intents": [{"type": "Attack", "damage": 12, "hits": 1, "label": "12",

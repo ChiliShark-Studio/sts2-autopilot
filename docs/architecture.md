@@ -66,7 +66,7 @@ flowchart TD
 
 | 模块 | 已有能力 | 与目标方案的差距 |
 |---|---|---|
-| `combat_search.py` | 单回合束搜索、自适应血量权重、部分状态和药水决策 | 不模拟抽牌后续和遗物触发，卡牌机制覆盖不完整 |
+| `combat/search.py` | 单回合束搜索、自适应血量权重、部分状态和药水决策 | 不模拟抽牌后续和遗物触发，卡牌机制覆盖不完整 |
 | `build_flow.py` | LLM 奖励与药水取舍、事件、购物 / 删牌服务、遗物、篝火和卡牌包；失败或离线回退 | 尚未验证真实模型和游戏流程，攻略与模拟器待接入 |
 | `select_tool.py` | 非战斗选牌使用构筑 LLM；战斗选牌保留启发式；确认和避免重复选择由脚本处理 | 战斗选牌尚不理解复杂配合，真机流程待验证 |
 | `map_router.py` | LLM 路线选择、完整可见地图与构筑输入、启发式回退 | 尚未接入经版本核实的攻略与模拟器，真实选路效果待验证 |
@@ -110,9 +110,11 @@ GameAgent（循环 + 路由）
          MapAgent       BuildAgent      CombatAgent      agents/*.py
               │              │              │
               ▼              ▼              ▼
-        MapRouterTool   BuildFlowTool  CombatSearchTool   tools/*.py
+        MapRouterTool   BuildFlowTool  CombatSearchTool
           (LLM+兜底)   (LLM选牌+启发式)   (束搜索)
 ```
+
+战斗实现集中在 `brain/combat/`：`search.py` 选择动作，`effects.py` 供搜索和模拟器共用效果结算，`enemy_rules.py` 提供敌人机制与搜索修正，`potion_advisor.py` 处理特定条件下的药水模型咨询，`session.py` 接管真实游戏中的一场战斗。`combat/__init__.py` 不预加载这些实现。具体卡牌规则留在 `cards/`，完整战斗引擎和回测留在 `sim/`；搜索中的临时推演状态仍留在 `combat/search.py`。同时服务战斗和非战斗的 `SelectTool` 保留在 `tools/`。
 
 | 文件 | 职责 | 不该做的事 |
 |---|---|---|
@@ -120,7 +122,10 @@ GameAgent（循环 + 路由）
 | `ports.py` | `GamePort` / `ToolPort` 协议 | 不含实现 |
 | `router.py` | `state_type` → 决策单元 | 不含策略 |
 | `agents/*.py` | 把请求转给工具 | 不含算法 |
-| `tools/*.py` | 真正的算法/LLM 调用 | 不直接发动作 |
+| `combat/search.py` | 战斗动作搜索、临时状态推演与评分 | 不运行完整场战斗，不直接发动作 |
+| `combat/effects.py` | 共享效果执行、生效状态管理与事件分发 | 不定义具体卡牌规则，不选择动作 |
+| `combat/session.py` | 读取真实状态、调用 Agent 并发送动作，接管一场战斗 | 不实现出牌算法或奖励决策 |
+| `tools/*.py` | 选路、构筑与选牌工具 | 不直接发动作 |
 | `transport.py` | HTTP 桥接 | 不含决策 |
 | `replay.py` | 落盘/读回 | 不参与决策 |
 
@@ -146,7 +151,7 @@ GameAgent（循环 + 路由）
 | `contracts.py` | `DecisionContracts.cs`（`record` + `System.Text.Json`） | 低 |
 | `model.py` | `GameSnapshot.cs`（现有 `/state` 的 DTO） | 低 |
 | `router.py` | `DecisionRouter.cs`（`switch (state_type)`） | 低 |
-| `tools/combat_search.py` | `CombatSearch.cs`（纯计算，无依赖） | 中 |
+| `combat/search.py` | `CombatSearch.cs`（纯计算，无依赖） | 中 |
 | `tools/map_router.py` | `MapRouter.cs`（`HttpClient` → OpenAI 兼容端点） | 中 |
 | `tools/build_flow.py` | `BuildFlow.cs` | 低 |
 | `agents/game.py` | `AutoPlayLoop.cs`（`Node._Process` + `CallDeferred`） | 中 |
@@ -156,7 +161,7 @@ GameAgent（循环 + 路由）
 建议顺序：
 
 1. **先搬契约和模型**，让 C# 能解析自己产出的 `/state`；
-2. **再搬 combat_search**（纯函数，最好测，收益最大）；
+2. **再搬 combat/search.py**（纯函数，最好测，收益最大）；
 3. **接 LLM**（mod 里已有 HttpClient，参考上游 STS2MCP 的用法）；
 4. **最后接主循环**，用 Godot 的 `_Process` 驱动，注意所有游戏调用要回主线程。
 

@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 MANTLE = {
     "index": 0, "id": "CRIMSON_MANTLE", "name": "绯红披风", "type": "Power", "cost": "1",

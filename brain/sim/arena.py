@@ -1,7 +1,7 @@
 """竞技场: 离线使用真实游戏所用的战斗策略打完整场战斗.
 
 这里没有第二套策略. 每次将状态渲染为桥接格式,
-交给真实 Agent 同样调用的 ``combat_search.decide_state`` 决策.
+交给真实 Agent 同样调用的 ``brain.combat.search.decide_state`` 决策.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from ..tools.combat_search import decide_state
+from ..combat.search import decide_state
 from .engine import DeckCard, Fight, FightResult, IntentExhausted, Monster
 from .scenario_file import Scenario
 

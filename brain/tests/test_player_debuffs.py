@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 EMERGENCY = {
     "index": 0, "name": "应急按钮+", "cost": "1", "block": 40, "target_type": "Self",

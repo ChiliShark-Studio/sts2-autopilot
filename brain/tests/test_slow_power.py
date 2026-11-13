@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, _plan, decide_state
+from brain.combat.search import _Sim, _plan, decide_state
 
 
 def state(*, hand, enemy_hp=87, slow=0, vulnerable=2, hp=47, energy=3, incoming=23):

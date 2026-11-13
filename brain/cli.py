@@ -8,7 +8,7 @@
     python -m brain.cli fight-live                   接管游戏里当前这场战斗
 
 这里只做"读参数, 选函数, 打印结果", 不含任何战斗或路线逻辑.
-真正的算法在 brain/tools/combat_search.py, 战斗规则在 brain/sim/engine.py.
+真正的算法在 brain/combat/search.py, 战斗规则在 brain/sim/engine.py.
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def _combat_benchmark(states: list[dict], *, verbose: bool, limit: int) -> int:
     """
     import time
 
-    from .tools.combat_search import decide_state
+    from .combat.search import decide_state
 
     rows = states[:limit]
     if not rows:
@@ -205,7 +205,7 @@ def cmd_fight(args: argparse.Namespace) -> int:
 
 def cmd_fight_live(args: argparse.Namespace) -> int:
     """接管游戏里当前这一场战斗, 打完就停; 不碰地图和奖励."""
-    from .combat_session import NotInCombat, fight_current
+    from .combat.session import NotInCombat, fight_current
 
     # offline=True: 根本不创建 LLM 客户端, 确保战斗过程零 LLM
     agent = build_agent(args.base, offline=True, journal_dir=Path("logs"))

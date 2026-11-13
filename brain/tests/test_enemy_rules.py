@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-from brain.enemy_rules import (STUN_TURN_VALUE, STRENGTH_RESET_VALUE,
+from brain.combat.enemy_rules import (STUN_TURN_VALUE, STRENGTH_RESET_VALUE,
                                CeremonialBeastRule, EnemyRule, RuleBook)
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 
 def _sim(*, enemy_hp=60, enemy_max=60, incoming=20, hp=30, hand=None, energy=1,

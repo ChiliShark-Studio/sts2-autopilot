@@ -4,7 +4,7 @@
 本模块在本地快速模拟战斗, 便于在大量固定场景中比较参数.
 
 复用真实游戏所用的决策函数: 每次将模拟状态渲染为桥接格式,
-调用 ``combat_search.decide_state``, 再应用返回的动作.
+调用 ``brain.combat.search.decide_state``, 再应用返回的动作.
 真实游戏和竞技场之间没有隐藏的第二套策略, 行为差异需要从实现中排查.
 
 已知的简化规则:
@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from ..model import Card
+from ..cards import BaseCard, Effect, Event, card_effects
+from ..combat.effects import ActiveEffect, apply_effects, emit, power_amount, power_statuses
 
 
 class IntentExhausted(Exception):
@@ -126,11 +128,14 @@ class DeckCard:
     end_turn_damage: int = 0
     id: str = ""
     description: str = ""
+    # 静态卡牌行为与本场实例的牌堆位置、费用等状态分开保存。
+    definition: BaseCard | None = field(default=None, repr=False)
     # ---- 能力牌 (Power) ----
     # 打出时立即获得的力量 (燃烧).
     strength: int = 0
     # 每回合开始获得的力量 (恶魔形态): 打出后一直生效.
     per_turn_strength: int = 0
+    block_per_attack: int = 0
     # 每次消耗牌时获得的格挡 / 抽牌 (无痛 / 黑暗之拥).
     block_per_exhaust: int = 0
     draw_per_exhaust: int = 0
@@ -209,7 +214,8 @@ class Fight:
         self.cards_played = 0
         self.damage_taken = 0
         # ---- 能力牌带来的持续状态 ----
-        self.per_turn_strength = 0
+        self.effect_powers: dict[str, ActiveEffect] = {}
+        self.effect_log: list[Effect] = []
         self.block_per_exhaust = 0
         self.draw_per_exhaust = 0
         self.keep_block = False
@@ -224,6 +230,14 @@ class Fight:
         self.ringing_pending = 0
         self.ringing_active = False
         self.turn_cards_played = 0
+
+    @property
+    def per_turn_strength(self) -> int:
+        return power_amount(self, "DEMON_FORM_POWER")
+
+    @property
+    def rage(self) -> int:
+        return power_amount(self, "RAGE_POWER")
 
     # -- 牌堆处理 --
     def _draw(self, count: int) -> None:
@@ -243,8 +257,7 @@ class Fight:
                 self.block = 0
             self.energy = self.max_energy
         self._started = True
-        # 恶魔形态: 每个回合开始累积力量.
-        self.strength += self.per_turn_strength
+        self.effect_log.extend(emit(self, Event.TURN_START))
         # 不可动摇: 每回合第一次获得格挡时翻倍.
         self.first_block_used = False
         # 昏眩只持续一个回合: 上一轮被施加的话, 本回合生效.
@@ -262,7 +275,8 @@ class Fight:
             return False
         card = self.hand[hand_index]
         # 腐化: 技能牌 (无伤害牌) 费用变 0, 且打出后消耗.
-        corrupted = self.corruption and card.damage == 0
+        definition = card.definition
+        corrupted = self.corruption and (definition.type == "skill" if definition else card.damage == 0)
         cost = 0 if corrupted else card.cost
         if not card.playable or cost > self.energy:
             return False
@@ -338,7 +352,11 @@ class Fight:
                         enemy.hp -= self.juggernaut
 
         # 能力牌: 打出后持续生效.
-        self.per_turn_strength += card.per_turn_strength
+        if definition is not None:
+            definition.play(self)
+        else:
+            apply_effects(self, card_effects(per_turn_strength=card.per_turn_strength,
+                                             block_per_attack=card.block_per_attack))
         self.block_per_exhaust += card.block_per_exhaust
         self.draw_per_exhaust += card.draw_per_exhaust
         self.juggernaut += card.juggernaut
@@ -367,7 +385,7 @@ class Fight:
                 self.block += self.block_per_exhaust
             if self.draw_per_exhaust:
                 self._draw(self.draw_per_exhaust)
-        else:
+        elif definition is None or definition.type != "power":
             self.discard.append(card)
         # 一张牌完整结算后切换阶段, 保留玩家血量, 牌堆, 格挡, 能量和当前回合.
         if self.hp > 0 and not any(m.alive for m in self.monsters) and self.following_phases:
@@ -376,9 +394,13 @@ class Fight:
         for monster in self.monsters:
             if monster.has_slow and monster.alive:
                 monster.slow += 1
+        kind = definition.type if definition else ("attack" if card.damage or card.scales_with_block else "skill")
+        if kind == "attack" and not self.over:
+            self.effect_log.extend(emit(self, Event.ATTACK_RESOLVED))
         return True
 
     def end_turn(self) -> None:
+        self.effect_log.extend(emit(self, Event.TURN_END))
         # 先结算仍在手中的感染等回合末伤害, 再弃牌; 伤害可被当前格挡吸收.
         for card in self.hand:
             if card.end_turn_damage:
@@ -450,11 +472,14 @@ class Fight:
         """将模拟状态渲染为 ``/api/v1/singleplayer`` 返回的数据形状."""
         hand = []
         for i, card in enumerate(self.hand):
+            definition = card.definition
             hand.append({
                 "index": i,
-                "id": card.id,
-                "type": "Status" if not card.playable else ("Attack" if card.damage > 0 else "Skill"),
+                "id": definition.id if definition is not None else card.id,
+                "type": "Status" if not card.playable else (
+                    definition.type.value if definition else ("Attack" if card.damage > 0 else "Skill")),
                 "name": card.name,
+                "is_upgraded": definition.upgraded if definition is not None else card.name.endswith("+"),
                 "cost": str(card.cost),
                 "damage": card.damage,
                 "block": card.block,
@@ -523,7 +548,7 @@ class Fight:
                            if self.dexterity else []) + (
                            [{"id": "RINGING_POWER", "name": "昏眩", "amount": 1,
                              "description": "本回合你只能打出1张牌。"}]
-                           if self.ringing_active else []),
+                           if self.ringing_active else []) + power_statuses(self),
                 "hand": hand,
             },
         }

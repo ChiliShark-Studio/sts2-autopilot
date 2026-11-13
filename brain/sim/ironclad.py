@@ -14,6 +14,7 @@ import os
 from typing import Optional
 
 from .engine import DeckCard
+from ..cards import definitions, find_card
 
 DATA_PATH = os.path.join("data", "cards", "ironclad.json")
 
@@ -39,8 +40,6 @@ BASE_CARDS: dict[str, dict] = {
     "欺凌": {"cost": 0, "damage": 4, "per_vulnerable": 2},
     "灰烬打击": {"cost": 1, "damage": 6, "per_exhaust": 3},
     # ---- 能力牌: 图鉴抓到的部分 ----
-    "恶魔形态": {"cost": 3, "per_turn_strength": 2},
-    "恶魔形态+": {"cost": 3, "per_turn_strength": 3},
     "燃烧": {"cost": 1, "strength": 2},
     "燃烧+": {"cost": 1, "strength": 3},
     "烙印": {"cost": 0, "hp_cost": 1, "strength": 1},
@@ -78,7 +77,8 @@ COMMUNITY_CARDS: dict[str, dict] = {
     "契约终章": {"cost": 0, "damage": 17, "exhaust": True},
 }
 
-ALL_CARDS: dict[str, dict] = {**BASE_CARDS, **COMMUNITY_CARDS}
+ALL_CARDS: dict[str, dict] = {**BASE_CARDS, **COMMUNITY_CARDS,
+                            **{c.name: c.simulation_fields() for c in definitions()}}
 
 
 def load_game_data() -> dict:
@@ -90,6 +90,10 @@ def load_game_data() -> dict:
 
 
 def card(name: str, upgraded: bool = False) -> DeckCard:
+    definition = find_card(name, upgraded=upgraded)
+    if definition is not None:
+        return DeckCard(name=definition.name, id=definition.id, target="Self", definition=definition,
+                        **definition.simulation_fields())
     key = name if not upgraded else f"{name}+"
     spec = ALL_CARDS.get(key)
     if spec is None:

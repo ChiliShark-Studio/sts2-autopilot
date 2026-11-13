@@ -7,7 +7,7 @@ import unittest
 from brain.contracts import Decision, DecisionKind, DecisionRequest, Source
 from brain.actions import UsePotion
 from brain.model import GameState
-from brain.tools.combat_search import CombatSearchTool
+from brain.combat.search import CombatSearchTool
 
 
 def state(*, hp=8, max_hp=80, energy=3, enemy_hp=40, incoming=15, hand=None, potions=None) -> dict:

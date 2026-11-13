@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.tools.combat_search import _Sim, decide_state
+from brain.combat.search import _Sim, decide_state
 
 GRIT = {
     "index": 0, "id": "TRUE_GRIT", "name": "坚毅", "type": "Skill", "cost": "1",
@@ -42,14 +42,14 @@ class ParseTests(unittest.TestCase):
 
 class CostTests(unittest.TestCase):
     def test_cost_is_zero_when_hand_is_junk(self):
-        from brain.tools.combat_search import _random_exhaust_cost
+        from brain.combat.search import _random_exhaust_cost
 
         parsed = GameState.parse(state([dict(WOUND, index=1), dict(WOUND, index=2)]))
         sim = _Sim.build(parsed.player, parsed.battle)
         self.assertEqual(_random_exhaust_cost(list(sim.hand), 1), 0.0)
 
     def test_cost_grows_with_core_cards(self):
-        from brain.tools.combat_search import _random_exhaust_cost
+        from brain.combat.search import _random_exhaust_cost
 
         parsed = GameState.parse(state([GRIT, CLEAVE_CARD, CLEAVE_CARD]))
         sim = _Sim.build(parsed.player, parsed.battle)

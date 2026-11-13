@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from brain.tools.combat_search import _Sim, _plan, decide_state
+from brain.combat.search import _Sim, _plan, decide_state
 
 
 def state(*, hp=70, max_hp=70, block=0, energy=3, enemy_hp=40, incoming=10,
@@ -87,7 +87,7 @@ class CardEnhancementTests(unittest.TestCase):
 
     def test_apply_upgrades_every_hand_card(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         raw = state(hand=three_strikes())
         parsed = GameState.parse(raw)
@@ -97,7 +97,7 @@ class CardEnhancementTests(unittest.TestCase):
 
     def test_uses_bridge_numbers_when_available(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         hand = [{"index": 0, "name": "打击", "cost": "1", "damage": 6,
                  "hits": 1, "target_type": "AnyEnemy", "damage_upgraded": 12}]
@@ -131,7 +131,7 @@ class DuplicationTests(unittest.TestCase):
 
     def test_next_card_is_played_twice(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         parsed = GameState.parse(state(enemy_hp=40, hand=three_strikes()))
         sim = _Sim.build(parsed.player, parsed.battle)
@@ -141,7 +141,7 @@ class DuplicationTests(unittest.TestCase):
 
     def test_power_from_state_also_doubles(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         raw = state(enemy_hp=40, hand=three_strikes())
         raw["player"]["status"] = [{"id": "DUPLICATION_POWER", "name": "复制", "amount": 1}]
@@ -265,7 +265,7 @@ class PotionPlanningTests(unittest.TestCase):
 
     def test_reuses_search_only_within_current_decision(self):
         raw = state(enemy_hp=40, potions=[fire_potion()])
-        with patch("brain.tools.combat_search._plan", wraps=_plan) as search:
+        with patch("brain.combat.search._plan", wraps=_plan) as search:
             with patch.object(_Sim, "build", wraps=_Sim.build) as build:
                 for attempt in range(1, 3):
                     decision = decide_state(raw)
@@ -332,7 +332,7 @@ class DexterityTests(unittest.TestCase):
 
     def test_applied_dexterity_adds_block_to_each_card(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         parsed = GameState.parse(state(hand=[defend(), defend()]))
         sim = _Sim.build(parsed.player, parsed.battle)
@@ -387,7 +387,7 @@ class DrawPotionTests(unittest.TestCase):
 
     def test_draw_potion_is_not_modelled_locally(self):
         from brain.effects import parse_potion
-        from brain.tools.combat_search import potion_effects_known
+        from brain.combat.search import potion_effects_known
 
         eff = parse_potion("抽3张牌。")
         self.assertEqual(eff["draw"], 3)
@@ -429,7 +429,7 @@ class BloodlettingTests(unittest.TestCase):
 
     def test_playing_it_trades_hp_for_energy(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim
+        from brain.combat.search import _Sim
 
         raw = state(hp=40, energy=0, hand=[{
             "index": 0, "name": "放血", "cost": "0",
@@ -467,7 +467,7 @@ class FairyPotionTests(unittest.TestCase):
 
     def test_lethal_turn_is_not_treated_as_death(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim, _plan
+        from brain.combat.search import _Sim, _plan
 
         # 10 血吃 30 点伤害: 有瓶中精灵时不会真的死, 方案终点应带回血量.
         raw = state(hp=10, incoming=30, max_hp=80, energy=0, hand=[],
@@ -479,7 +479,7 @@ class FairyPotionTests(unittest.TestCase):
 
     def test_without_fairy_the_same_turn_is_fatal(self):
         from brain.model import GameState
-        from brain.tools.combat_search import _Sim, _plan
+        from brain.combat.search import _Sim, _plan
 
         raw = state(hp=10, incoming=30, max_hp=80, energy=0, hand=[], potions=[])
         st = GameState.parse(raw)

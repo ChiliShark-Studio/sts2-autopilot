@@ -276,7 +276,7 @@ class MapRouterTool:
         地图上不显示具体是哪一只精英, 所以只能评估最坏情况;
         本幕没有可模拟的精英时返回 None, 调用方退回血量阈值.
         """
-        # 延迟导入: brain.sim 会经由 combat_search 反向导入本模块.
+        # 延迟导入：仅在评估精英风险时加载离线模拟器。
         from ..sim import scenarios
         from ..sim.engine import deck_from_cards
         from ..sim.risk import assess
