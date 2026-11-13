@@ -72,6 +72,11 @@ class Monster:
     # 状态 (HARDENED_SHELL_POWER) 给的是本回合剩余额度, 这里同时保存上限供新回合重置.
     hp_loss_cap: int = 0
     hp_loss_left: int = 0
+    # 胆小 (花园幽灵鳗): 每回合第一次被命中时获得这么多格挡.
+    skittish: int = 0
+    skittish_used: bool = False
+    # 战斗类型: 战斗算法按它调整血量权重 (小怪更珍惜生命).
+    kind: str = "monster"
 
     def __post_init__(self) -> None:
         # 从场景文件按上限构造时, 第一回合的额度也要跟着满上.
@@ -220,7 +225,8 @@ class Fight:
                  block: int = 0, strength: int = 0, dexterity: int = 0,
                  following_phases: Optional[list[list[Monster]]] = None,
                  starting_hand: Optional[list[DeckCard]] = None,
-                 relic_first_block_double: bool = False) -> None:
+                 relic_first_block_double: bool = False,
+                 screen: Optional[str] = None) -> None:
         self.hp = hp
         self.max_hp = max_hp
         self.max_energy = max_energy
@@ -235,6 +241,9 @@ class Fight:
         self.rng = random.Random(seed)
         self.seed = seed
         self.turn = 1
+        # 战斗类型 (monster / elite / boss): 决定战斗算法的血量权重.
+        # 未显式指定时按敌人自身的类型推断, 精英/Boss 场景不必每次手写.
+        self.screen = screen or (monsters[0].kind if monsters else "monster")
         # 臂甲: 每场战斗第一次从牌获得格挡时翻倍 (只触发一次, 不按回合重置).
         self.relic_first_block_double = relic_first_block_double
         self.relic_first_block_used = False
@@ -311,6 +320,8 @@ class Fight:
             monster.slow = 0
             # 硬化外壳: 每回合的掉血额度在新回合重新给满.
             monster.hp_loss_left = monster.hp_loss_cap
+            # 胆小: 每回合只有第一次被命中会吃格挡.
+            monster.skittish_used = False
         if self._prefilled_hand:
             # 场景给定的是"当前这回合"的手牌, 不再补抽.
             self._prefilled_hand = False
@@ -388,6 +399,10 @@ class Fight:
                     # 硬化外壳会截断本回合的总掉血; 超出额度的伤害不生效.
                     hit = monster.lose_hp(max(0, dmg - absorbed))
                     dealt += hit
+                    # 胆小: 被命中之后才获得格挡, 保护同一回合的后续命中.
+                    if monster.skittish and not monster.skittish_used:
+                        monster.block += monster.skittish
+                        monster.skittish_used = True
                 # 受伤后可能触发敌人的击晕/阶段切换 (例如仪式兽).
                 monster.on_damaged(dealt)
 
@@ -591,7 +606,7 @@ class Fight:
             })
 
         return {
-            "state_type": "monster",
+            "state_type": self.screen,
             "battle": {
                 "round": self.turn,
                 "turn": "player",
@@ -632,6 +647,8 @@ class Fight:
             # 导出本回合剩余额度, 与游戏状态一致 (每回合重置为上限).
             out.append({"id": "HARDENED_SHELL_POWER", "name": "硬化外壳",
                         "amount": monster.hp_loss_left})
+        if monster.skittish:
+            out.append({"id": "SKITTISH_POWER", "name": "胆小", "amount": monster.skittish})
         # 额外能力: 保留 id 和数值, 供敌人机制规则读取 (如仪式兽的横冲直撞层数).
         for power_id, amount in monster.powers.items():
             out.append({"id": power_id, "name": power_id, "amount": amount})

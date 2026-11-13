@@ -45,8 +45,15 @@ _RANDOM_EXHAUST = re.compile(r"随机消耗\s*(\d+)\s*张牌")
 _BODY_SLAM = re.compile(r"当前格挡值?\s*的伤害")
 # 欺凌: "该敌人身上每有一层易伤就额外造成2点伤害。" 伤害随目标易伤层数成长.
 _PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点伤害")
+# 残酷: "有易伤状态的敌人额外受到25%的伤害" (百分比).
+_CRUELTY = re.compile(r"易伤[^。]*?额外受到\s*(\d+)\s*%")
 # 灰烬打击: "你的消耗牌堆中每有一张牌，伤害增加3。"
 _PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
+# 痛殴: "造成4点伤害两次。 消耗...随机一张攻击牌，并将它的伤害添加给这张牌."
+_HITS_TWICE = re.compile(r"造成\s*\d+\s*点伤害\s*两次")
+# 群体伤害: "对所有敌人造成 X 点伤害", 选牌评分要按多目标算.
+_AOE = re.compile(r"对所有敌人")
+_ABSORB_ATTACK = re.compile(r"将它的伤害添加给这张牌")
 # 拆卸: "如果该敌人有易伤状态，则攻击两次。" 命中段数取决于目标状态.
 _HITS_IF_VULNERABLE = re.compile(r"如果[^。]*?易伤[^。]*?攻击两次")
 _UPGRADE_HAND = re.compile(r"升级(?:你|你的)?手牌中的(一张|所有)牌")
@@ -199,6 +206,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
     damage = _field(card, "damage", _DAMAGE)
     block = _field(card, "block", _BLOCK)
     hits = _int(card.get("hits"), 0) if "hits" in card else 0
+    if hits <= 1 and _HITS_TWICE.search(desc):
+        hits = 2
 
     # 附魔加成 (锋利/浸墨): 结构化字段不含, 但游戏会把它算进描述里的数字.
     enchant_text = " ".join(
@@ -260,8 +269,9 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "grants_block": not (per_turn_block or block_per_attack) and (block > 0 or bool(_BLOCK.search(desc))),
         "block_per_attack": block_per_attack,
         "effects": card_effects(per_turn_strength=per_turn_strength, block_per_attack=block_per_attack),
-        "vulnerable": _field(card, "vulnerable", _VULN),
-        "weak": _field(card, "weak", _WEAK),
+        # 易伤/虚弱: 桥接字段可能给 0 (痛击就是), 描述里有就以描述为准.
+        "vulnerable": _field(card, "vulnerable", _VULN) or _first(_VULN, desc),
+        "weak": _field(card, "weak", _WEAK) or _first(_WEAK, desc),
         "draw": _field(card, "draw", _DRAW),
         # 能量可能是结构化字段, 也可能被渲染成图标; 每个能量图标算 1 点.
         "energy": energy_now,
@@ -274,12 +284,18 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "hp_cost": _first(_HP_COST, desc),
         # 覆甲: 回合结束时按层数获得格挡.
         "plated": _first(_PLATED, desc),
+        # 残酷: 易伤敌人额外受伤的倍率 (0.25 = 再多 25%).
+        "cruelty": _first(_CRUELTY, desc) / 100,
         # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
         "body_slam": bool(_BODY_SLAM.search(desc)),
         # 欺凌 / 灰烬打击: 伤害随易伤层数或消耗堆成长.
         "per_vulnerable": fixed.get("per_vulnerable") or _first(_PER_VULNERABLE, desc),
         "per_exhaust": fixed.get("per_exhaust") or _first(_PER_EXHAUST, desc),
         # 目标有易伤时多打一段 (拆卸).
+        # 痛殴: 随机烧掉一张攻击牌, 把它的伤害加到自己身上.
+        "absorb_attack": bool(_ABSORB_ATTACK.search(desc)),
+        # 群体伤害: 选牌评分按多目标折算, 战斗结算仍然逐个敌人算.
+        "aoe": bool(_AOE.search(desc)),
         "hits_if_vulnerable": 2 if _HITS_IF_VULNERABLE.search(desc) else 0,
         "upgrade_hand": bool(hand_upgrade) or armaments,
         "upgrade_all": bool(hand_upgrade and hand_upgrade.group(1) == "所有") or (

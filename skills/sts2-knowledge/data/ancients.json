@@ -1,0 +1,363 @@
+[
+  {
+    "name": "涅奥",
+    "english": "Neow",
+    "note": "涅奥是开局事件: 优先换到过渡能力与上限 (变牌/升级/删牌), 不要拿纯经济或加最大生命。",
+    "aliases": {
+      "树叶药膏": "Leafy Poultice",
+      "白银熔炉": "Silver Crucible",
+      "金色珍珠": "Golden Pearl",
+      "松动羊毛剪": "Precise Scissors",
+      "新叶": "New Leaf",
+      "卷轴箱": "Scroll Boxes"
+    },
+    "tiers": [
+      {
+        "tier": "T0",
+        "relics": [
+          "树叶药膏 Leafy Poultice",
+          "白银熔炉 Silver Crucible"
+        ]
+      },
+      {
+        "tier": "T0.5",
+        "relics": [
+          "金色珍珠 Golden Pearl",
+          "松动羊毛剪 Precise Scissors"
+        ]
+      },
+      {
+        "tier": "T1",
+        "relics": [
+          "新叶 New Leaf",
+          "精准剪刀",
+          "铅制镇纸 Lead Paperweight",
+          "诅咒珍珠 Cursed Pearl",
+          "小型扭蛋 Small Capsule"
+        ]
+      },
+      {
+        "tier": "T2",
+        "relics": [
+          "卷轴箱 Scroll Boxes",
+          "失物盒 Lost Coffer",
+          "奥术卷轴 Arcane Scroll"
+        ]
+      },
+      {
+        "tier": "T3/T4",
+        "relics": [
+          "巨大扭蛋 Large Capsule",
+          "橙型香盒",
+          "石炉加湿器 Stone Humidifier",
+          "涅奥的苦痛 Neow's Torment",
+          "轰鸣海螺 Booming Conch",
+          "营养牡蛎 Nutritious Oyster",
+          "熔岩石 Lava Rock"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "达尔夫",
+    "english": "Darv",
+    "note": "达尔夫任意幕都可能出现; 前三档都能直接改变牌组质量, 召唤铃带诅咒是 C。",
+    "aliases": {},
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "潘多拉魔盒 Pandora's Box",
+          "符文金字塔 Runic Pyramid"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "星盘 Astrolabe",
+          "空笼 Empty Cage"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "黑星 Black Star",
+          "蛇眼 Snecko Eye",
+          "尘封典籍 Dusty Tome"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "召唤铃 Calling Bell"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "奥罗巴斯",
+    "english": "Orobas",
+    "note": "药水槽与起手能量最值钱; 沙堡/海玻璃是纯随机, 属于 D。",
+    "aliases": {},
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "炼金宝箱 Alchemical Coffer",
+          "光辉珍珠 Radiant Pearl"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "浮木 Driftwood",
+          "远古之牙 Archaic Tooth"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "电光虾 Electric Shrymp",
+          "棱彩宝石 Prismatic Gem"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "玻璃眼 Glass Eye",
+          "奥罗巴斯之触 Touch of Orobas"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "沙堡 Sand Castle",
+          "海玻璃 Sea Glass"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "佩尔",
+    "english": "Pael",
+    "note": "佩尔之泪/眼/血都是纯收益; 佩尔之肉是第 3 回合起 +1 能量 (A, 仍然好)。",
+    "aliases": {
+      "佩尔之肉": "Pael's Flesh",
+      "佩尔的增生组织": "Pael's Growth",
+      "佩尔的士兵": "Pael's Legion"
+    },
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "佩尔之泪 Pael's Tears",
+          "佩尔之眼 Pael's Eye",
+          "佩尔之血 Pael's Blood"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "佩尔之肉 Pael's Flesh",
+          "佩尔之爪 Pael's Claw"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "佩尔之翼 Pael's Wing",
+          "佩尔的增生组织 Pael's Growth"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "佩尔的士兵 Pael's Legion"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "佩尔之角 Pael's Horn",
+          "佩尔之牙 Pael's Tooth"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "特兹卡塔拉",
+    "english": "Tezcatara",
+    "note": "烘焙手套每回合烧掉抽牌堆顶只换 1 点力量, 是自毁牌组的 D 级陷阱。",
+    "aliases": {
+      "烫嘴可可": "Very Hot Cocoa",
+      "烘焙手套": "Toasty Mittens",
+      "黄金罗盘": "Golden Compass"
+    },
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "故事书 Storybook"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "美味饼干 Yummy Cookie",
+          "大拥抱 Biiig Hug",
+          "黄金罗盘 Golden Compass"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "烫嘴可可 Very Hot Cocoa",
+          "营养汤 Nutritious Soup"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "南瓜蜡烛 Pumpkin Candle",
+          "黄金印记 Seal of Gold"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "烘焙手套 Toasty Mittens",
+          "玩具箱 Toy Box"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "诺努佩佩",
+    "english": "Nonupeipe",
+    "note": "钻石王冠 (少出牌则减半受伤) 是最强; 珠宝盒/印章戒指直接给资源。",
+    "aliases": {},
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "钻石王冠 Diamond Diadem"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "精致叶枝 Delicate Frond",
+          "珠宝盒 Jewelry Box",
+          "印章戒指 Signet Ring"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "祝福鹿角 Blessed Antler",
+          "闪耀围巾 Brilliant Scarf",
+          "美丽手镯 Beautiful Bracelet"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "闪光 Glitter",
+          "高悬果实 Looming Fruit"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "毛皮大衣 Fur Coat"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "坦克斯",
+    "english": "Tanx",
+    "note": "切肉刀/十手是稳定收益; 战锤依赖杀精英, 尖刺护手让 power 加费, 都是 D。",
+    "aliases": {},
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "切肉刀 Meat Cleaver",
+          "十手 Sai"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "铁棍 Iron Club",
+          "坦克斯的哨子 Tanx's Whistle",
+          "投掷斧 Throwing Axe",
+          "三向回旋镖 Tri-Boomerang"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "利爪 Claws"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "弩 Crossbow"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "尖刺护手 Spiked Gauntlets",
+          "战锤 War Hammer"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "瓦库",
+    "english": "Vakuu",
+    "note": "显赫披风给你 3 张幽魂 (无实体); 小提琴限制抽牌是 D。",
+    "aliases": {},
+    "tiers": [
+      {
+        "tier": "S",
+        "relics": [
+          "显赫披风 Distinguished Cape",
+          "珠宝面具 Jeweled Mask"
+        ]
+      },
+      {
+        "tier": "A",
+        "relics": [
+          "低语耳环 Whispering Earring",
+          "保存的雾 Preserved Fog",
+          "选择悖论 Choices Paradox"
+        ]
+      },
+      {
+        "tier": "B",
+        "relics": [
+          "枯爪 Sere Talon",
+          "音乐盒 Music Box"
+        ]
+      },
+      {
+        "tier": "C",
+        "relics": [
+          "浸血玫瑰 Blood-Soaked Rose"
+        ]
+      },
+      {
+        "tier": "D",
+        "relics": [
+          "小提琴 Fiddle",
+          "领主之伞 Lord's Parasol"
+        ]
+      }
+    ]
+  }
+]

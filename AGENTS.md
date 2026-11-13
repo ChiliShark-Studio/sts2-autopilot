@@ -52,6 +52,7 @@ brain/               决策层
   cli.py             命令入口（中文注释）
 tools/               ApiProbe（反射探针）、mock_llm、extract_combat
 logs/                原始日志：每步完整状态，**不入库**（1-3MB/局）
+skills/              项目内技能包：SKILL.md（说明书+触发条件）+ data/*.json
 scenarios/           真机战斗局面（手牌/遗物/怪物），**入库**，模拟器可直接重放
 ```
 
@@ -78,6 +79,9 @@ python -m unittest discover -s brain/tests -t .     # 239 个离线测试
 4. **状态字段以 mod 的 `/state` 为准。** 不自己发明字段名。
 5. **代码标识符英文，注释中文。** `cli.py` 已按此标准。
 6. **`brain/.env` 绝不提交**（已在 .gitignore）。
+7. **知识放技能包，别写死在提示词里。** 具体牌组合、事件选项、先古遗物分级放
+   `skills/<name>/SKILL.md` + `data/*.json`，由 `brain/skills.py` 按事件 / 牌名 / 界面
+   命中后注入 `situation.skills`；提示词只留通用原则。
 
 ## 已知坑
 

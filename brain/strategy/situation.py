@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from ..model import GameState
+from .ancients import guide_for as ancient_guide
 from .context import StrategyContext
+from .events import guide_for as event_guide
+from .knowledge import relevant_notes
 
 
 # 铁甲战士主线组件（按中文牌名, 桥接的牌组列表只给名字）.
@@ -81,6 +84,19 @@ COUNTER_CARDS: dict[str, str] = {
 }
 
 
+def _is_engine(card) -> bool:
+    """引擎牌: 能持续提高每回合资源或成长, 而不只是当回合的伤害/格挡.
+
+    按解析出的效果判断, 不只看牌名: 薪火之源 (每回合 +1 能量) 这类新牌
+    没进 ENGINE_CARDS 时报"无引擎", 会让选牌模型重复拿同一张引擎。
+    """
+    if card.name.rstrip("+") in ENGINE_CARDS:
+        return True
+    return bool(card.per_turn_energy > 0 or card.strength > 0 or card.per_turn_strength > 0
+                or card.cruelty > 0 or card.plated > 0 or card.block_per_attack > 0
+                or card.per_turn_block > 0)
+
+
 def deck_report(state: GameState) -> dict:
     """牌组体检: 把"还缺什么"算成模型能直接读的数字.
 
@@ -94,8 +110,14 @@ def deck_report(state: GameState) -> dict:
     attacks = [c for c in deck if c.damage > 0]
     damage_total = sum(c.damage * max(1, c.hits) for c in attacks)
     block_sources = sum(1 for c in deck if c.block > 0 or c.plated > 0)
+    engines = [c.name for c in deck if _is_engine(c)]
+    # 同名张数: 第二张同名卡只是重复占位, 模型需要看到这个事实.
+    counts: dict[str, int] = {}
+    for name in names:
+        counts[name] = counts.get(name, 0) + 1
+    duplicates = {name: count for name, count in counts.items() if count >= 2}
     missing: list[str] = []
-    if not any(n.rstrip("+") in ENGINE_CARDS for n in names):
+    if not engines:
         missing.append("引擎")
     if not attacks:
         missing.append("攻击牌")
@@ -128,7 +150,9 @@ def deck_report(state: GameState) -> dict:
         "defends": names.count("防御"),
         "attack_cards": len(attacks),
         "block_cards": block_sources,
-        "engine_cards": sorted({n for n in names if n.rstrip("+") in ENGINE_CARDS}),
+        # 引擎按效果判定 (不再只认牌名表), 否则薪火之源这类能量引擎会被漏掉.
+        "engine_cards": sorted(set(engines)),
+        "duplicates": duplicates,
         "payoff_cards": sorted({n for n in names if n.rstrip("+") in PAYOFF_CARDS}),
         "vulnerable_sources": sorted({n for n in names if n.rstrip("+") in VULNERABLE_SOURCES}),
         # 组合: ready 是两个部件都齐, missing 是只差一半(优先补).
@@ -152,14 +176,47 @@ def removal_price(ascension: int, removals: int) -> int:
     return base + step * max(0, removals)
 
 
-def situation(state: GameState, context: StrategyContext) -> dict:
+def _event_guides(state: GameState) -> dict:
+    """当前事件的数据表: 普通事件给选项提升度, 先古事件给遗物分级."""
+    event = state.raw.get("event") or {}
+    name = str(event.get("event_name") or event.get("event_id") or "")
+    result: dict = {}
+    ancient = ancient_guide(name)
+    if ancient is not None:
+        result["ancient"] = ancient
+    guide = event_guide(name)
+    if guide is not None:
+        result["event"] = guide
+    return result
+
+
+def _skills(state: GameState, card_names=()) -> list[dict]:
+    """当前局面命中的技能包 (按事件名 / 牌名 / 界面)."""
+    from ..skills import matching
+
+    event = state.raw.get("event") or {}
+    return [skill.to_dict() for skill in matching(
+        event_name=str(event.get("event_name") or ""),
+        card_names=list(card_names),
+        screen=state.screen.value,
+    )]
+
+
+def situation(state: GameState, context: StrategyContext, extra_names=()) -> dict:
     """保留桥接完整效果，避免领域模型中仅存名称或缺省值造成信息丢失。"""
     player = state.raw.get("player")
+    deck_names = [card.name for card in state.player.deck]
     return {
         "run": state.raw.get("run") or asdict(state.run),
         "player": player if isinstance(player, dict) else asdict(state.player),
         "map": state.raw.get("map"),
         "scene": state.raw.get(state.screen.value),
+        # 组合知识: 只在相关牌出现时注入, 避免提示词越来越长.
+        "knowledge": relevant_notes(list(deck_names) + list(extra_names)),
+        # 事件数据: 普通事件给选项提升度, 先古事件给遗物分级.
+        "event_guide": _event_guides(state),
+        # 命中的技能包: 说明书正文 + 数据说明, 只在相关局面出现.
+        "skills": _skills(state, deck_names + list(extra_names)),
         # 商店相关: 删牌价格随已删次数上涨, 规划路线时要用估算价而不是固定 75.
         "shop": {
             "removals_bought": context.removals,

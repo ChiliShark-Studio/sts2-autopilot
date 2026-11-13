@@ -83,7 +83,8 @@ def assess(deck: list[DeckCard], hp: int, max_hp: int, act: int, *,
             result.unmodeled.append(encounter)
             continue
         fights = [
-            run_fight(deck, monsters_factory(), seed=seed + i, hp=hp, max_hp=max_hp)
+            run_fight(deck, monsters_factory(), seed=seed + i, hp=hp, max_hp=max_hp,
+                      screen="elite")
             for i in range(runs)
         ]
         if not fights:

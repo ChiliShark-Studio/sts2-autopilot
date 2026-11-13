@@ -53,8 +53,16 @@ def choose(client, state: GameState, context: StrategyContext, *, task: str,
 效果以输入的当前游戏描述为准；尚未接入模拟器或经版本核实的攻略，不编造规则、精确胜率或已模拟的结论。
 只能选择 candidates 中的 choice 整数，每次仅执行一个动作，随后重新读取状态。
 只输出 JSON：{{"choice": <候选整数>, "reason": "<简短中文依据>", "build_plan": "<已有组件、主要短板、下一步需求，300字以内>"}}"""
+    # 候选中出现的牌也要算进组合知识: 选牌时模型要能看到"这张牌和已有牌怎么配合".
+    candidate_names = []
+    for _, _, details in candidates:
+        if isinstance(details, dict):
+            for key in ("name", "card_name"):
+                value = details.get(key)
+                if isinstance(value, str):
+                    candidate_names.append(value)
     payload = {
-        "situation": situation(state, context),
+        "situation": situation(state, context, extra_names=candidate_names),
         "task": task,
         "candidates": [
             {"choice": index, "action": action.to_payload(), "details": details}

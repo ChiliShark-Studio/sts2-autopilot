@@ -242,6 +242,30 @@ class NeowPromptTests(unittest.TestCase):
         self.assertIn("永久加入牌组", client.json_chat.call_args.args[0])
 
 
+    def test_iron_wave_is_never_offered(self):
+        # 铁斩波这类平庸的攻防一体牌: 候选里直接剔除, 模型没有机会选.
+        reward = {"state_type": "card_reward",
+                  "card_reward": {"cards": [{"index": 0, "id": "IRON_WAVE", "name": "铁斩波",
+                                                "cost": "1", "damage": 5, "block": 5}]},
+                  "player": {"character": "铁甲战士", "hp": 60, "max_hp": 80}}
+        decision = BuildFlowTool().decide(request(reward, "card_reward"))
+        self.assertEqual(decision.action.kind, "skip_card_reward")
+
+        client = client_with({"choice": 0})
+        reward_mixed = {"state_type": "card_reward",
+                        "card_reward": {"cards": [
+                            {"index": 0, "id": "IRON_WAVE", "name": "铁斩波", "cost": "1",
+                             "damage": 5, "block": 5},
+                            {"index": 1, "id": "STONE_ARMOR", "name": "岩石铠甲", "cost": "1",
+                             "description": "获得4层覆甲。"}]},
+                        "player": {"character": "铁甲战士", "hp": 60, "max_hp": 80}}
+        BuildFlowTool(client).decide(request(reward_mixed, "card_reward"))
+        payload = json.loads(client.json_chat.call_args.args[1])
+        offered = [item["details"].get("name") for item in payload["candidates"]]
+        self.assertNotIn("铁斩波", offered)
+        self.assertIn("岩石铠甲", offered)
+
+
 class StrategyContextTests(unittest.TestCase):
     def test_full_effects_and_shared_plan_reach_route_and_reset_at_menu(self):
         state = copy.deepcopy(REWARD_STATE)
@@ -301,6 +325,91 @@ class StrategyContextTests(unittest.TestCase):
         self.assertIn("每张牌都要回答", prompt)
         self.assertIn("先删打击", prompt)
         self.assertIn("删牌优先于买新牌", prompt)
+
+    def test_prompt_forbids_citing_a_mainline_without_its_engine(self):
+        # 第 7 层把飞剑回旋镖当"服务力量主线"选中, 当时牌组里根本没有力量来源.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("没有引擎就不算", prompt)
+        self.assertIn("1 费 9 伤", prompt)
+
+    def test_trap_cards_from_the_tier_list_are_never_offered(self):
+        # 攻略里明确垫底的牌 (破击/余烬, 约 31% 胜率) 与铁斩波一起排除.
+        from brain.build.scoring import NEVER_PICK
+
+        for name in ("铁斩波", "破击", "余烬"):
+            self.assertIn(name, NEVER_PICK)
+        reward = {"state_type": "card_reward",
+                  "card_reward": {"cards": [
+                      {"index": 0, "id": "BREAK", "name": "破击", "cost": "1"},
+                      {"index": 1, "id": "CINDER", "name": "余烬", "cost": "1"}]},
+                  "player": {"character": "铁甲战士", "hp": 60, "max_hp": 80}}
+        decision = BuildFlowTool().decide(request(reward, "card_reward"))
+        self.assertEqual(decision.action.kind, "skip_card_reward")
+
+    def test_prompt_mentions_the_ancient_tier_rule(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("先古事件", prompt)
+        self.assertIn("烘焙手套", prompt)
+        self.assertIn("event_guide.ancient", prompt)
+
+    def test_prompt_explains_energy_icon_text(self):
+        # 描述里的 4[energy_icon] 被读成"41能量", 需要说明图标含义.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("[energy_icon]", prompt)
+
+    def test_prompt_points_at_the_event_data(self):
+        # 复盘: 脑蛭选了"分享知识"(lift -0.8), 而"把它扯下来"是 +6.2.
+        # 具体数据不再写死在提示词里, 改为注入 situation.event_guide.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("事件选择", prompt)
+        self.assertIn("event_guide", prompt)
+        self.assertIn("提升度", prompt)
+
+    def test_prompt_judges_enchant_events_by_effect(self):
+        # 自助指南的"能力附魔提升度高"是选择偏差: 迅速只触发一次, 锋利是永久加伤.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("只触发一次", prompt)
+        self.assertIn("附魔类事件按效果算", prompt)
+        self.assertIn("锋利", prompt)
+
+    def test_knowledge_table_covers_the_sharp_multihit_combo(self):
+        # 锋利 + 飞剑回旋镖是这局实际用到的 combo, 现在放在结构化知识表里按牌组注入.
+        from brain.strategy.knowledge import relevant_notes
+
+        notes = relevant_notes(["飞剑回旋镖+", "打击"])
+        topics = [item["topic"] for item in notes]
+        self.assertIn("附魔组合·锋利", topics)
+        text = " ".join(item["note"] for item in notes)
+        self.assertIn("每段都吃", text)
+
+    def test_knowledge_only_injects_matching_entries(self):
+        from brain.strategy.knowledge import relevant_notes
+
+        self.assertEqual(relevant_notes(["打击"]), [])
+        self.assertEqual([item["topic"] for item in relevant_notes(["防御"])],
+                         ["附魔组合·灵巧"])
+        self.assertEqual([item["topic"] for item in relevant_notes(["残酷"])],
+                         ["残酷 + 易伤"])
+
+    def test_prompt_has_deck_size_rule(self):
+        # 复盘: 第 3 层、8 张牌组却跳过了卡牌奖励, 理由是"不稀释"——薄牌组谈不上稀释.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("少于 12 张", prompt)
+        self.assertIn("deck_fit.deck_size", prompt)
+        self.assertIn("一定要拿", prompt)
+
+    def test_prompt_limits_hybrid_common_cards(self):
+        # 第 4 层把铁斩波当"补格挡"选中, 同一奖励里就有第二张岩石铠甲 (可叠层).
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("铁斩波", prompt)
+        self.assertIn("0 张", prompt)
+        self.assertIn("叠层", prompt)
+
+    def test_prompt_prioritises_block_when_it_is_the_gap(self):
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("block_cards", prompt)
+        self.assertIn("先补短板再补强度", prompt)
+        self.assertIn("武装", prompt)
 
     def test_battle_and_combat_pickers_never_call_llm(self):
         client = client_with()

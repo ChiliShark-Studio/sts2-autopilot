@@ -26,12 +26,15 @@ from __future__ import annotations
 
 import copy
 import math
+import sys
 from dataclasses import dataclass, field, replace
 from typing import Any, Optional
 
 from ..actions import EndTurn, PlayCard, UsePotion
 from ..contracts import WAIT, Decision, DecisionKind, DecisionRequest, Source
 from ..cards import EffectKind, Event, capability, card_effects
+from ..strategy.card_audit import audit
+from .enemy_rules import attack_growth
 from .effects import ActiveEffect, apply_effects, emit, power_amount, read_powers, resolve_cost, resolve_hits
 from ..effects import parse_potion
 from ..model import Battle, Card, Player, Potion
@@ -40,6 +43,16 @@ from ..upgrades import choose_upgrade, upgrade, upgrade_gain
 # 自适应血量权重: 自身 1 点生命对应的敌方生命价值.
 HP_WEIGHT_FULL = 0.4
 HP_WEIGHT_LOW = 2.0
+# 按战斗类型放大血量权重: 小怪战多花一张防御是划算的, 精英和 Boss 需要抢节奏换血.
+# 第一幕小怪打 11 点一下不挡, 连着三四场就吃掉半管血, 到精英时已经没血可打.
+# 实测 (初始牌组 70 血, 各 10 场): 小怪权重 3.5 时 nibbit 掉血 17.9 -> 15.5,
+# 颚虫 10.0 -> 7.0, 史莱姆 24.3 -> 18.5, 胜率不变, 回合数 +0~1.
+HP_SCALE_BY_SCREEN = {"monster": 3.5, "elite": 1.15, "boss": 1.0}
+# 方案打完会死时的一次性惩罚, 远大于任何单回合收益.
+DEATH_PENALTY = 1000.0
+# 呼唤 (BECKON): Boss 塞进手牌的状态牌, 回合结束时留在手里每张失去 6 点生命.
+# 证据: 2026-11-14 真机状态 "在你的回合结束时，如果这张牌在你的手牌中，你失去6点生命".
+BECKON_HP_LOSS = 6
 OVERBLOCK_WEIGHT = 0.1
 VULNERABLE_VALUE = 3.0
 WEAK_VALUE = 2.0
@@ -76,6 +89,29 @@ _SLIPPERY = {"滑溜", "slippery", "SLIPPERY_POWER"}
 _INTANGIBLE = {"无实体", "intangible", "INTANGIBLE_POWER"}
 # 硬化外壳: 每回合失去的生命有上限, 直接限制击杀速度.
 _HARDENED_SHELL = {"硬化外壳", "HARDENED_SHELL_POWER"}
+# 呼唤: Boss 塞进手牌的状态牌, 回合结束留在手里要掉血.
+_BECKON = {"呼唤", "BECKON"}
+# 用生命换能量/抽牌的牌 (祭品 / 放血): 单回合模型算不出"抽到的那几张牌",
+# 只能靠规则判断——血量还够、本回合又打不死敌人时, 这类牌几乎总是正收益.
+_TEMPO_HP_CARDS = {"祭品", "OFFERING", "放血", "BLOODLETTING"}
+# 血量比例低于该值时不再主动付生命换节奏.
+TEMPO_HP_FLOOR = 0.4
+
+
+def unmodeled_power(card) -> bool:
+    """能力牌的效果是否完全没有被本地模型建模 (打出去等于白板).
+
+    这类牌交给模型判断; 例如新版本新增、还没写进卡牌集的能力牌.
+    """
+    if str(getattr(card, "type", "")).lower() != "power":
+        return False
+    if any((card.damage, card.block, card.strength, card.dexterity, card.plated,
+            card.cruelty, card.per_turn_strength, card.per_turn_energy,
+            card.per_turn_block, card.block_per_attack)):
+        return False
+    return not card.effects
+# 胆小: 本回合第一次被命中时先白拿一层格挡, 一回合内只触发一次.
+_SKITTISH = {"胆小", "SKITTISH_POWER"}
 # 复制药水的 "本回合下一张牌额外打出一次" 效果对应此玩家状态.
 _DUPLICATION = {"复制", "duplication", "DUPLICATION_POWER"}
 # 会改变数值结算的玩家负面状态.
@@ -97,6 +133,8 @@ SLOW_STEP = 0.10
 LETHAL_PENALTY = 1000.0
 # 每回合额外获得 1 点能量大约值多少分 (约等于一张基础攻击牌的伤害).
 ENERGY_VALUE = 6.0
+# 能量引擎 (每回合 +N 能量) 的额外权重: 多出的能量会让后续抽到的牌打得更顺.
+ENERGY_ENGINE_UPLIFT = 1.5
 # 估计战斗还剩几回合: 按敌方总血量每 20 点一回合, 限制在 1~5 回合.
 HP_PER_TURN = 20
 MAX_FUTURE_TURNS = 5
@@ -117,6 +155,7 @@ def _card_value(card: Card) -> float:
     value = card.damage * card.hits + card.block * 0.9
     value += card.vulnerable * 3 + card.weak * 2 + card.draw * 2 + card.energy * 3
     value += card.strength * 4 + card.dexterity * 3 + card.plated * 2
+    value += card.cruelty * 20
     return value
 
 
@@ -185,6 +224,24 @@ class _Enemy:
     # 硬化外壳 (鬼祟珊瑚群): 本回合最多失去这么多生命, 状态里给的是剩余额度.
     # -1 表示没有这个能力; 0 是"额度已经用完", 两者不能混为一谈.
     hp_loss_left: int = -1
+    # 胆小 (花园幽灵鳗): 每回合第一次被命中时获得这么多格挡.
+    skittish: int = 0
+    skittish_used: bool = False
+    # 当前力量层数.
+    strength: int = 0
+    # 本回合意图是"强化" (Buff).
+    buff_intent: bool = False
+    # 强化后攻击伤害的实际增长: 按怪物规则算 (enemy_rules), 未知怪物为 0.
+    attack_growth: int = 0
+
+    @property
+    def scaling(self) -> bool:
+        """攻击伤害是否在持续变高.
+
+        光有力量层数不算: 闪光贾克斯果的力量涨到 18, 攻击仍然只有 3 点
+        (真机 9 回合掉血 69 的实测)。只有规则确认力量会加到攻击上才算变强。
+        """
+        return self.attack_growth > 0
 
     @property
     def alive(self) -> bool:
@@ -219,10 +276,14 @@ class _Sim:
     dexterity: int = 0
     # 覆甲层数: 回合结束时按层数获得格挡.
     plated: int = 0
+    # 残酷: 易伤敌人额外受伤的倍率 (0.25 = 再多 25%), 打出后整场生效.
+    cruelty: float = 0.0
     # 阵亡自动复活 (瓶中精灵) 时回复的最大生命值百分比; 0 表示没有这类药水.
     revive_pct: int = 0
     # 本回合最多能打出几张牌 (昏眩把上限压到 1).
     play_limit: int = 99
+    # 抢输出模式: 敌人在叠力量, 不再考虑纯格挡牌.
+    skip_block: bool = False
     cards_played: int = 0
     # 打出后会在后续回合持续产生的价值 (例如薪火之源每回合 +1 能量).
     future_value: float = 0.0
@@ -253,10 +314,32 @@ class _Sim:
     attack_damage: float = 0.0
     attack_cost: float = 0.0
 
+    # 战斗类型对血量权重的放大倍数 (小怪战更珍惜生命).
+    hp_value_scale: float = 1.0
+    # 整副牌组: 用来估算"抽一张牌值多少" (剩余牌库 = 牌组 - 手牌).
+    deck: list[Card] = field(default_factory=list)
+
+    def expected_draw_value(self) -> float:
+        """抽到一张牌的平均价值, 按还没抽到的牌库估算.
+
+        牌库内容取"整副牌组减去当前手牌"; 牌序未知, 因此取期望而不是具体某张.
+        """
+        pool = list(self.deck)
+        for card in self.hand:
+            for index, candidate in enumerate(pool):
+                if candidate.name == card.name and candidate.id == card.id:
+                    pool.pop(index)
+                    break
+        if not pool:
+            return 0.0
+        return sum(_card_value(card) for card in pool) / len(pool)
+
     @classmethod
-    def build(cls, player: Player, battle: Battle) -> "_Sim":
+    def build(cls, player: Player, battle: Battle, *, hp_value_scale: float = 1.0) -> "_Sim":
         attacks = [c for c in player.deck if c.type == "attack" or c.damage or c.body_slam]
         return cls(
+            hp_value_scale=hp_value_scale,
+            deck=list(player.deck),
             hp=player.hp,
             max_hp=player.max_hp,
             block=player.block,
@@ -306,6 +389,12 @@ class _Sim:
                     has_slow=_has_power(e.powers, _SLOW),
                     hp_loss_left=(_power(e.powers, _HARDENED_SHELL)
                                   if _has_power(e.powers, _HARDENED_SHELL) else -1),
+                    skittish=_power(e.powers, _SKITTISH),
+                    strength=_power(e.powers, _STRENGTH),
+                    buff_intent=any("buff" in intent.type.lower() for intent in e.intents),
+                    attack_growth=attack_growth(
+                        e.name, e.entity_id,
+                        buff_intent=any("buff" in intent.type.lower() for intent in e.intents)),
                 )
                 for e in battle.alive_enemies
             ],
@@ -318,6 +407,23 @@ class _Sim:
     def rage(self) -> int:
         return power_amount(self, "RAGE_POWER")
 
+    def race_needed(self) -> bool:
+        """是否该抢输出而不是继续防.
+
+        只在"敌人已经真的叠起力量"时才考虑抢输出: 单回合模型看不到它下回合
+        更疼, 一直防等于慢性死亡。门槛刻意设得高——
+          * 敌人已有 >= 2 点力量 (光有 Buff 意图不算, 很多敌人是攻击+Buff);
+          * 自己血量 >= 六成 (残血先保命);
+          * 两回合内打不死 (打得死就交给正常方案, 不叫抢输出)。
+        """
+        if self.hp <= 0 or (self.hp / self.max_hp if self.max_hp else 1.0) < 0.6:
+            return False
+        scaling = [enemy for enemy in self.enemies if enemy.alive and enemy.scaling]
+        if not scaling:
+            return False
+        alive_hp = sum(enemy.hp for enemy in self.enemies if enemy.alive)
+        return alive_hp > 2 * self.firepower()
+
     def legal(self) -> list[tuple[int, Optional[int]]]:
         # 昏眩等状态会限制本回合出牌数, 达到上限后只剩结束回合.
         if self.cards_played >= self.play_limit:
@@ -326,6 +432,10 @@ class _Sim:
         for pos, card in enumerate(self.hand):
             if not card.can_play or resolve_cost(card.cost, card.cost_x, self.energy) > self.energy:
                 continue
+            # 需要抢输出时 (敌人在叠力量), 不再把纯格挡牌算作候选.
+            if self.skip_block and not (card.damage or card.body_slam or card.per_vulnerable):
+                if card.block or card.plated or card.per_turn_block:
+                    continue
             if card.needs_target:
                 for i, enemy in enumerate(self.enemies):
                     if enemy.alive:
@@ -371,7 +481,8 @@ class _Sim:
                 if self.shrink:
                     dmg = int(dmg * 0.70)
                 if enemy.vulnerable:
-                    dmg = int(dmg * 1.5)
+                    # 残酷: 易伤敌人再多受 cruelty 比例的伤害 (0.25 = 再多 25%).
+                    dmg = int(dmg * (1.5 + self.cruelty))
                 # 缓慢: 本回合每打出一张牌, 该敌人从攻击牌受到的伤害 +10%.
                 # 因此攻击牌应当留到最后打, 前置的非攻击牌会抬高后续伤害.
                 if enemy.slow:
@@ -387,6 +498,12 @@ class _Sim:
                 enemy.block -= absorbed
                 # 硬化外壳会截断本回合的总掉血, 超出的伤害等于白打.
                 enemy.lose_hp(dmg - absorbed)
+                # 胆小: 被命中之后才获得格挡, 保护的是同一回合的后续命中.
+                # 真机证据 (2026-11-14 花园幽灵鳗): 御血术 15 点让 26 血降到 11 (全额),
+                # 之后该敌人才出现 6 点格挡, 并挡掉后续的 3 点.
+                if enemy.skittish and not enemy.skittish_used:
+                    enemy.block += enemy.skittish
+                    enemy.skittish_used = True
 
         gain = card.block + self.dexterity if card.grants_block or card.block else 0
         if self.frail:
@@ -411,8 +528,15 @@ class _Sim:
                 emit(self, Event.ATTACK_RESOLVED)
         if card.per_turn_energy:
             self.future_energy += card.per_turn_energy * multiplier
-            # 单回合搜索看不到后续收益, 按预计剩余回合折算.
-            self.future_value += card.per_turn_energy * ENERGY_VALUE * self.future_turns()
+            # 能量引擎 (薪火之源): 单回合搜索看不到后续收益, 按剩余回合折算;
+            # 再乘 ENERGY_ENGINE_UPLIFT, 因为多出的能量也会让之后抽到的牌打得更顺,
+            # 否则这类延迟收益的牌在束搜索里总是被当回合多打一刀挤掉.
+            self.future_value += (card.per_turn_energy * ENERGY_VALUE
+                                  * self.future_turns() * ENERGY_ENGINE_UPLIFT)
+        if card.draw:
+            # 抽牌: 用剩余牌库的平均牌价值折算, 而不是拍一个固定分.
+            # 状态里有整副牌组, 扣掉手牌就是还没抽到的牌.
+            self.future_value += card.draw * self.expected_draw_value()
         if card.future_block_per_turn:
             # 后续回合的格挡: 只算"之后还会打几回合", 且不超过牌上写明的回合数.
             usable = max(0, min(card.future_block_turns, self.future_turns() - 1))
@@ -428,8 +552,32 @@ class _Sim:
             # 随机消耗烧掉哪张不可控: 按剩余手牌的平均价值折算期望损失.
             # 先把能打的牌打完再打它, 手牌变少/变废时损失自然降低.
             self.future_value -= _random_exhaust_cost(self.hand, card.random_exhaust)
-        # 覆甲: 回合结束时按层数获得格挡, 单回合模型按当回合可用格挡计.
-        self.plated += card.plated * multiplier
+        # 覆甲: 回合结束时获得格挡, 之后每回合减少 1 层.
+        # 当回合的格挡已经计入 blocked, 这里补上后续回合的递减收益——
+        # 只算当回合会把岩石铠甲这类牌低估成"4 点格挡的防御".
+        if card.plated:
+            self.plated += card.plated * multiplier
+            decay = sum(max(0, card.plated - turn)
+                        for turn in range(1, self.future_turns()))
+            self.future_value += decay * self.hp_weight() * multiplier
+        # 残酷: 整场战斗中易伤敌人额外受伤.
+        # 它本身不造成伤害, 价值全在后续回合的易伤攻击上:
+        # 只算当回合的话, 敌人此刻没有易伤就等于一张白板, 永远不会被打出.
+        if card.cruelty:
+            self.cruelty += card.cruelty * multiplier
+            per_turn = max(self.firepower(), 6.0)
+            self.future_value += card.cruelty * per_turn * self.future_turns() * multiplier
+        # 痛殴: 随机烧掉一张攻击牌, 把它的伤害加到"这张牌"上, 下一次打出才生效.
+        # 当回合仍然是 4 点两段; 加成按之后还能再抽到并打出它的概率折价.
+        if card.absorb_attack:
+            others = [c.damage * max(1, c.hits) for c in self.hand
+                      if c is not card and c.damage > 0]
+            if others:
+                absorbed = sum(others) / len(others)
+                deck_size = max(1, len(self.deck) or 15)
+                per_draw = min(1.0, 5.0 / deck_size)
+                chance = 1 - (1 - per_draw) ** max(1, self.future_turns())
+                self.future_value += absorbed * card.hits * chance * multiplier
         # 以生命为费用: 放血之外的掉血牌也要付这个代价.
         if card.hp_cost:
             self.hp = max(0, self.hp - card.hp_cost)
@@ -499,10 +647,15 @@ class _Sim:
         return {"redraw_probability": probability, "known_gain": gain, "estimate": probability * gain}
 
     def hp_weight(self) -> float:
-        """自身 1 点生命对应的敌方生命价值, 血量越低越值钱."""
+        """自身 1 点生命对应的敌方生命价值, 血量越低越值钱.
+
+        ``hp_value_scale`` 由战斗类型决定: 小怪战多挡一刀是赚的, 精英和 Boss
+        需要抢节奏, 权重保持原样.
+        """
         ratio = self.hp / self.max_hp if self.max_hp else 1.0
         ratio = max(0.0, min(1.0, ratio))
-        return HP_WEIGHT_FULL + (HP_WEIGHT_LOW - HP_WEIGHT_FULL) * (1.0 - ratio)
+        base = HP_WEIGHT_FULL + (HP_WEIGHT_LOW - HP_WEIGHT_FULL) * (1.0 - ratio)
+        return base * self.hp_value_scale
 
     def future_turns(self) -> int:
         """按敌方剩余总血量粗略估计还能打几回合, 用于折算每回合收益."""
@@ -599,7 +752,14 @@ class _Sim:
 
         # 幻象敌人死亡后会满血复活: 打掉的血量不算战果, 否则会一直打爪牙.
         score = -sum(e.hp for e in alive if not e.revives)
-        score -= unblocked * hp_weight
+        # 呼唤: 回合结束还留在手里的每张都要掉 6 点生命, 与未挡伤害一起计入.
+        beckon_loss = BECKON_HP_LOSS * sum(
+            1 for card in self.hand if card.id in _BECKON or card.name in _BECKON)
+        score -= (unblocked + beckon_loss) * hp_weight
+        # 打完这回合会死: 单回合搜查看不到下一回合, 必须显式惩罚,
+        # 否则"多挡 5 点也照样死"和"少掉 5 点血"得分几乎一样.
+        if self.hp - unblocked - beckon_loss <= 0:
+            score -= DEATH_PENALTY
         score += max(0, self.block - covered) * OVERBLOCK_WEIGHT
         score += sum(e.vulnerable for e in alive) * VULNERABLE_VALUE
         score += sum(e.weak for e in alive) * WEAK_VALUE
@@ -702,6 +862,9 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
         if not expanded:
             break
         expanded.sort(key=lambda item: rank(item[0]), reverse=True)
+        # 束搜索保留 top-beam; 延迟收益的走法 (先打引擎牌) 中间分低, 靠
+        # ENERGY_ENGINE_UPLIFT / 抽牌估值把它们的终局分提前反映出来,
+        # 而不是给每个首张动作预留名额——那样会挤掉更优的后续.
         frontier = [(child, seq) for _, child, seq in expanded[:beam]]
         if not any(child.legal() for child, _ in frontier):
             break
@@ -711,11 +874,18 @@ def _plan(sim: _Sim, beam: int = 10, depth: int = 7, rules=None) -> _Plan:
 class CombatSearchTool:
     name = "combat_search"
 
-    def __init__(self, beam: int = 10, depth: int = 7, advisor=None, rules=None) -> None:
+    def __init__(self, beam: int = 10, depth: int = 7, advisor=None, rules=None,
+                 tempo=None, power=None) -> None:
         self.beam = beam
         self.depth = depth
+        # 每场战斗只做一次卡牌解析体检, 避免刷屏.
+        self._audited = False
         # 效果无法模拟的药水 (抽牌 / 随机牌等) 只能由模型判断是否使用.
         self.advisor = advisor
+        # 祭品/放血这类"付生命换节奏"的牌: 抽牌价值只能估算, 边界情况问模型.
+        self.tempo = tempo
+        # 完全没有建模的能力牌: 在本地模型里是白板, 打不打问模型.
+        self.power = power
         # 敌人机制规则 (策略模式); 默认不假设任何机制.
         self.rules = rules
         self._advised: dict[tuple, Optional[Decision]] = {}
@@ -736,8 +906,19 @@ class CombatSearchTool:
         if battle is None or not battle.can_act:
             return WAIT
 
+        # 战斗开始时给整副牌做一次解析体检: 描述有内容但解析没接住的牌
+        # 在模型里等于白板 (残酷/覆甲/祭品抽牌/胆小/痛殴都这样漏过).
+        if not self._audited:
+            self._audited = True
+            warnings = audit(list(battle.hand) + list(state.player.deck))
+            for warning in warnings:
+                print(f"[card-audit] {warning.name}: {'; '.join(warning.hints)}",
+                      file=sys.stderr)
+
         # 同一次决策复用基础状态和搜索结果, 下一次决策仍从新状态重新计算.
-        sim = _Sim.build(state.player, battle)
+        # 战斗类型决定血量权重: 小怪战多挡一刀是赚的, 精英和 Boss 抢节奏.
+        scale = HP_SCALE_BY_SCREEN.get(state.screen.value, 1.0)
+        sim = _Sim.build(state.player, battle, hp_value_scale=scale)
         plan = _plan(sim, self.beam, self.depth, self.rules)
 
         # 药水不消耗能量, 在出牌消耗能量前检查.
@@ -753,9 +934,94 @@ class CombatSearchTool:
             return self._finish(Decision(action=EndTurn(), reason="手牌为空",
                                          source=Source.SCRIPT, tool=self.name))
 
+        # 呼唤: 本回合打不死 Boss 时, 先花 1 费把它清掉.
+        # 不这么做就会每张每回合掉 6 点血: 实测 (灵魂异鱼录像, 各 30 场)
+        # 满血胜率 55% -> 80%, 70 血 25% -> 37%, 60 血 5% -> 17%.
+        if not plan.won:
+            beckon = next((card for card in battle.hand
+                           if (card.id in _BECKON or card.name in _BECKON)
+                           and card.can_play
+                           and resolve_cost(card.cost, card.cost_x, state.player.energy)
+                           <= state.player.energy), None)
+            if beckon is not None:
+                return self._finish(Decision(
+                    action=PlayCard(beckon, None),
+                    reason="清掉呼唤: 本回合无法斩杀, 留着要掉 6 点血",
+                    source=Source.SEARCH, tool=self.name))
+
+        # 祭品 / 放血: 用生命换能量与抽牌. 抽到的牌只能按牌库平均值估算,
+        # 边界情况交给模型判断; 模型说留着就不再用规则兜底.
+        tempo_cards = [
+            card for card in battle.hand
+            if (card.id in _TEMPO_HP_CARDS or card.name in _TEMPO_HP_CARDS) and card.can_play
+        ]
+        if not plan.won and tempo_cards:
+            verdict = "unavailable"
+            if self.tempo is not None:
+                advised = self.tempo.advise(state, tempo_cards)
+                if advised is not None:
+                    return self._finish(advised)
+                verdict = self.tempo.last_verdict
+            # 模型明确说"留着"时不再用规则兜底; 没有模型或回复无效才走规则.
+            if verdict != "keep" and state.player.hp_ratio >= TEMPO_HP_FLOOR:
+                tempo = next((card for card in tempo_cards
+                              if resolve_cost(card.cost, card.cost_x, state.player.energy)
+                              <= state.player.energy), None)
+                if tempo is not None:
+                    return self._finish(Decision(
+                        action=PlayCard(tempo, None),
+                        reason=f"{tempo.name}: 用生命换能量与手牌, 本回合无法斩杀",
+                        source=Source.SEARCH, tool=self.name))
+
+        # 效果没建模的能力牌: 本地模型里是白板, 打不打由模型判断.
+        # 没有模型时保持原行为 (不打), 不拿能量去赌一张算不出价值的牌.
+        if self.power is not None and not plan.won:
+            powers = self.power.candidates(state)
+            if powers:
+                advised = self.power.advise(state, powers)
+                if advised is not None:
+                    return self._finish(advised)
+
+        # 能力牌 (尤其能量引擎) 的收益在后续回合, 单回合束搜索容易在中间层
+        # 把它剪掉: 实测薪火之源 (2 费 +1 能量) 先打出去的终局分是 +5.7,
+        # 而搜索选了 -39.8 的另一条。这里对每张能打的能力牌做一次"打完再规划",
+        # 用完整终局分和当前方案比, 成本是每张能力牌多一次规划。
+        if not plan.won:
+            powers = [card for card in sim.hand
+                      if card.type == "power" and card.can_play
+                      and resolve_cost(card.cost, card.cost_x, sim.energy) <= sim.energy]
+            best_power, best_score = None, plan.score
+            for card in powers[:3]:
+                position = sim.hand.index(card)
+                branch = sim.clone()
+                if not branch.play(position, None):
+                    continue
+                follow = _plan(branch, self.beam, self.depth, self.rules)
+                if follow.score > best_score + 1.0:
+                    best_power, best_score = card, follow.score
+            if best_power is not None:
+                return self._finish(Decision(
+                    action=PlayCard(best_power, None),
+                    reason=f"{best_power.name}: 能力牌按终局收益更优（{best_score:.0f} vs {plan.score:.0f}）",
+                    source=Source.SEARCH, tool=self.name))
+
         if not plan.sequence:
             return self._finish(Decision(action=EndTurn(), reason="没有更优出牌",
                                          source=Source.SEARCH, tool=self.name))
+
+        # 敌人在叠力量时不能一直防: 纯格挡牌挡得住这回合, 挡不住下回合.
+        # 血量健康又秒不掉时, 关掉纯格挡牌重新规划一次, 用结果和原方案比.
+        first_pos, _ = plan.sequence[0]
+        first = sim.hand[first_pos] if first_pos < len(sim.hand) else None
+        block_only = (first is not None
+                      and not (first.damage or first.body_slam or first.per_vulnerable)
+                      and (first.block or first.plated or first.per_turn_block))
+        if block_only and sim.race_needed():
+            race_sim = sim.clone()
+            race_sim.skip_block = True
+            race_plan = _plan(race_sim, self.beam, self.depth, self.rules)
+            if race_plan.sequence and race_plan.hp_left >= 0.2 * sim.max_hp:
+                plan, sim = race_plan, race_sim
 
         pos, target_index = plan.sequence[0]
         card = sim.hand[pos]

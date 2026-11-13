@@ -35,7 +35,8 @@ from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..strategy.choice import LLM_ATTEMPTS, choose, no_decision
 from ..strategy.context import StrategyContext
 from ..strategy.prompts import event_prompt
-from .scoring import _card_dict_value, card_score
+from .scoring import (NEVER_PICK, _card_dict_value, card_score, deck_context,
+                      marginal_value)
 from .shop import ShopDecision
 
 SKIP_THRESHOLD = 2.0
@@ -144,16 +145,40 @@ class BuildFlowTool:
         return decision
 
     def _card_reward(self, request: DecisionRequest) -> Decision:
-        cards = request.state.card_reward
+        # 陷阱牌 (铁斩波这类) 直接从候选里剔除: 模型看不到, 也就选不出来.
+        # 全部被剔除时只剩"跳过".
+        cards = [c for c in request.state.card_reward
+                 if c.name not in NEVER_PICK and c.id not in NEVER_PICK]
         if not cards:
-            return Decision(action=SkipCardReward(), reason="没有可选卡", source=Source.HEURISTIC, tool=self.name)
+            self._pending_card_open = True
+            return Decision(action=SkipCardReward(), reason="奖励里都是不该拿的牌，跳过",
+                            source=Source.HEURISTIC, tool=self.name)
 
-        candidates = [(c.index, SelectCardReward(c.index), asdict(c)) for c in cards]
+        # 每张候选带上牌组事实 (同名张数、类型饱和、缺口), 由模型自己判断;
+        # "加进牌组值多少"的合成分数只用于无模型时的兜底, 不塞给模型,
+        # 免得它拿一个启发式分数替代推理.
+        deck = request.state.player.deck
+        context = deck_context(deck)
+        candidates = []
+        for card in cards:
+            fit = marginal_value(card, deck)
+            candidates.append((card.index, SelectCardReward(card.index),
+                               {**asdict(card),
+                                "deck_fit": {"same_card_in_deck": fit["copies"],
+                                             "notes": fit["notes"],
+                                             "deck_size": context["cards"],
+                                             "attacks": context["attacks"],
+                                             "powers": context["powers"],
+                                             "engines": context["engines"],
+                                             "draw_cards": context["draws"]}}))
         candidates.append((-1, SkipCardReward(), {"说明": "跳过卡牌奖励"}))
         decision = self._choose(
             request,
             "选择一张奖励牌或跳过。按主线判断：这张牌服务哪条主线、补的是哪个缺口"
             "（引擎/收益件/格挡/过牌）？"
+            "details.deck_fit 给出牌组事实：同名已有几张、类型是否饱和、牌组缺口；"
+            "**同名卡第二张起价值递减**（引擎牌尤其明显），deck_report.engine_cards "
+            "已经有引擎时不要再拿第二张引擎。"
             "先看 deck_report.combos_missing：能补齐\"只差一半\"的两件套时优先拿；"
             "combos_ready 已成立时只拿补强，不要稀释。"
             "需要前置（例如全身撞击需要壁垒、欺凌需要易伤来源）而前置还没有时，先跳过。"
@@ -163,8 +188,8 @@ class BuildFlowTool:
             self._pending_card_open = True
             return decision
 
-        best = max(cards, key=lambda c: (card_score(c), -c.index))
-        score = card_score(best)
+        best = max(cards, key=lambda c: (marginal_value(c, deck)["score"], -c.index))
+        score = marginal_value(best, deck)["score"]
         if score < SKIP_THRESHOLD:
             self._pending_card_open = True
             return Decision(action=SkipCardReward(), reason=f"最高分 {score:.1f} 太低", source=Source.HEURISTIC, tool=self.name)

@@ -6,7 +6,7 @@ import unittest
 
 from brain.effects import parse_card
 from brain.model import GameState
-from brain.combat.search import ENERGY_VALUE, _Sim, decide_state
+from brain.combat.search import ENERGY_ENGINE_UPLIFT, ENERGY_VALUE, _Sim, decide_state
 
 PYRE = {
     "index": 0, "id": "PYRE", "name": "薪火之源", "type": "Power", "cost": "2",
@@ -45,7 +45,7 @@ class SimTests(unittest.TestCase):
         turns = sim.future_turns()
         self.assertTrue(sim.play(0, None))
         self.assertGreater(sim.future_value, 0)
-        self.assertAlmostEqual(sim.future_value, ENERGY_VALUE * turns)
+        self.assertAlmostEqual(sim.future_value, ENERGY_VALUE * turns * ENERGY_ENGINE_UPLIFT)
         # 能量只少了 2 点费用, 没有立即回能.
         self.assertEqual(sim.energy, 1)
 

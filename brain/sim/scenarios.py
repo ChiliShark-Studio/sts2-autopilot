@@ -43,7 +43,7 @@ def _jaw_worm() -> list[Monster]:
 
 
 def _lagavulin() -> list[Monster]:
-    return [Monster("拉加维林", hp=109, max_hp=109,
+    return [Monster("拉加维林", hp=109, max_hp=109, kind="elite",
                     script=[Intent("attack", 18), Intent("attack", 18), Intent("attack", 18)])]
 
 
@@ -66,7 +66,7 @@ def _ceremonial_beast() -> list[Monster]:
         "仪式兽", hp=252, max_hp=252,
         # 跺地只在第 1 回合, 之后重复横冲直撞.
         script=[stamp, plow], repeat=True, repeat_from=1,
-        entity_id="CEREMONIAL_BEAST_0",
+        entity_id="CEREMONIAL_BEAST_0", kind="boss",
         next_phase_script=[cry, stomp, crush],
     )]
 
@@ -88,7 +88,7 @@ def _vantom() -> list[Monster]:
             Intent("custom", handler="sunder", params={"damage": 26, "wound": 1}),
             Intent("buff", strength=2),
         ],
-        entity_id="VANTOM_0", slippery=8,
+        entity_id="VANTOM_0", slippery=8, kind="boss",
     )]
 
 
@@ -107,7 +107,7 @@ def _bygone_effigy() -> list[Monster]:
             Intent("buff", strength=10),
             Intent("attack", damage=13),
         ],
-        repeat=True, repeat_from=2, entity_id="BYGONE_EFFIGY_0", has_slow=True,
+        repeat=True, repeat_from=2, entity_id="BYGONE_EFFIGY_0", has_slow=True, kind="elite",
     )]
 
 
@@ -121,7 +121,7 @@ def _byrdonis() -> list[Monster]:
     return [Monster(
         "多尼斯异鸟", hp=84, max_hp=84,
         script=[Intent("attack", damage=3, hits=3), Intent("attack", damage=17)],
-        entity_id="BYRDONIS_0", territorial=1,
+        entity_id="BYRDONIS_0", territorial=1, kind="elite",
     )]
 
 
@@ -141,7 +141,7 @@ def _skulking_colony() -> list[Monster]:
         script=[Intent("attack", damage=14),
                 Intent("attack", damage=9, strength=2),
                 Intent("attack", damage=7, hits=2)],
-        entity_id="SKULKING_COLONY_0", hp_loss_cap=20, hp_loss_left=20,
+        entity_id="SKULKING_COLONY_0", hp_loss_cap=20, hp_loss_left=20, kind="elite",
     )]
 
 
@@ -155,21 +155,23 @@ def _terror_eel() -> list[Monster]:
     return [Monster(
         "骇鳗", hp=140, max_hp=140,
         script=[Intent("attack", damage=16), Intent("attack", damage=3, hits=3)],
-        entity_id="TERROR_EEL_0",
+        entity_id="TERROR_EEL_0", kind="elite",
     )]
 
 
 def _phantasmal_gardeners() -> list[Monster]:
-    """暗港精英 花园幽灵鳗: 4 只, 每只 27-32 血.
+    """暗港精英 花园幽灵鳗: 4 只, 每只 27-32 血 (真机实测 31).
 
     招式: 啃咬 5 / 甩动 7 / 猛晃 1 点 3 段 / 变大 +3 力量 (各自循环).
-    固有 Skittish 7 (每回合第一次被击中时获得格挡) 未重建, 结果偏乐观.
-    数值来源: Spire Codex 与 Untapped (4 只, 合计 108-128 血).
+    胆小 (SKITTISH_POWER) 6: 每回合第一次被命中时获得 6 点格挡.
+    4 只各白拿一次, 等于每回合多出 24 点有效血量, 不建模会严重高估我们的输出.
+    证据: 2026-11-14 真机状态 "花园幽灵鳗每回合第一次被命中时，获得6点格挡"。
     """
     script = [Intent("attack", damage=5), Intent("attack", damage=7),
               Intent("attack", damage=1, hits=3), Intent("buff", strength=3)]
-    return [Monster("花园幽灵鳗", hp=28, max_hp=28, script=list(script),
-                    entity_id=f"PHANTASMAL_GARDENER_{i}") for i in range(4)]
+    return [Monster("花园幽灵鳗", hp=31, max_hp=31, script=list(script),
+                    entity_id=f"PHANTASMAL_GARDENER_{i}", kind="elite", skittish=6)
+            for i in range(4)]
 
 
 def _phrog_parasite() -> list[Monster]:
@@ -183,7 +185,7 @@ def _phrog_parasite() -> list[Monster]:
         "异蛙寄生虫", hp=64, max_hp=64,
         script=[Intent("custom", handler="add_infection", params={"count": 1, "pile": "discard"}),
                 Intent("attack", damage=4, hits=4)],
-        entity_id="PHROG_PARASITE_0",
+        entity_id="PHROG_PARASITE_0", kind="elite",
     )]
 
 

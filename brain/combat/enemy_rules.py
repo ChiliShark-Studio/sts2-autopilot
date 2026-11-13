@@ -42,6 +42,13 @@ class EnemyRule:
         """击晕时是否会清空敌方力量 (力量越高, 这一下的价值越大)."""
         return False
 
+    def attack_growth_after_buff(self, enemy) -> int:
+        """敌人这回合"强化"之后, 下回合攻击伤害实际增长多少.
+
+        默认 0: 不知道它的 Buff 是什么就不假设伤害会涨, 避免凭空制造威胁。
+        """
+        return 0
+
     def matches(self, enemy) -> bool:
         """实体 id 形如 CEREMONIAL_BEAST_0, 因此按"id + 下划线后缀"匹配."""
         entity_id = getattr(enemy, "entity_id", "") or ""
@@ -79,6 +86,25 @@ class CeremonialBeastRule(EnemyRule):
         return True
 
 
+@dataclass(frozen=True)
+class ShimmeringJaxfruitRule(EnemyRule):
+    """闪光贾克斯果: 每回合攻击 3 点并叠 2 点力量, 但力量不加到攻击上.
+
+    证据 (2026-11-14 第一幕第 8 层, logs/run-20261114-064351.jsonl):
+      * 意图固定是"攻击 3" + "强化", 状态里的力量从 2 一路涨到 18;
+      * 逐回合掉血 1/14/7/1/7/16/7/12/4, 9 回合共 69 点, 平均 7.7;
+      * 若力量真的加到攻击上, 第九回合应该是 21 点, 两回合就该打死我们。
+    所以它的伤害按固定 3 点建模, 强化只是状态数字。
+    """
+
+    ids = ("SHIMMERING_JAXFRUIT", "JAXFRUIT")
+    names = ("闪光贾克斯果",)
+    strength_per_buff = 2
+
+    def attack_growth_after_buff(self, enemy) -> int:
+        return 0
+
+
 class RuleBook:
     """敌人 id → 规则的注册表; 默认不含任何规则."""
 
@@ -87,7 +113,7 @@ class RuleBook:
 
     @classmethod
     def with_defaults(cls) -> "RuleBook":
-        return cls([CeremonialBeastRule()])
+        return cls([CeremonialBeastRule(), ShimmeringJaxfruitRule()])
 
     def rule_for(self, enemy) -> Optional[EnemyRule]:
         for rule in self.rules:
@@ -135,3 +161,26 @@ class RuleBook:
                 if isinstance(strength, int) and strength > 0:
                     total += strength * STRENGTH_RESET_VALUE
         return total
+
+
+@dataclass(frozen=True)
+class _Shim:
+    """只带名称与 id 的轻量对象, 给规则做匹配用."""
+
+    name: str = ""
+    entity_id: str = ""
+
+
+_BOOK = RuleBook.with_defaults()
+
+
+def attack_growth(name: str, entity_id: str, *, buff_intent: bool) -> int:
+    """这个怪物本回合强化后, 下回合攻击会涨多少点.
+
+    未知怪物返回 0: 不假设它会变强, 也就不会因为"有 Buff 意图"就去抢输出.
+    """
+    if not buff_intent:
+        return 0
+    shim = _Shim(name=name, entity_id=entity_id)
+    rule = _BOOK.rule_for(shim)
+    return rule.attack_growth_after_buff(shim) if rule is not None else 0

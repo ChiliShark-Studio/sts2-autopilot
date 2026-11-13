@@ -1,0 +1,102 @@
+{
+  "name": "暗港精英·花园幽灵鳗（真机录像 2026-11-14）",
+  "description": "2026-11-14 第一幕第 12 层精英战的第一回合: 铁甲战士 29/80 血、能量 3、无力量, 4 只花园幽灵鳗 (31/28/29/26 血) 各带胆小 6。手牌、牌组与遗物取自当时的桥接状态。近似项: 飞剑回旋镖+ 的随机目标按全体命中 4 段计; 御血术按 15 伤计 (未扣自身生命); 拆卸按 8 伤计 (未建模易伤时的二次命中); 藏宝图、燃烧契约、巨像、武装只保留可直接结算的部分 (0/0/5 格挡/5 格挡)。敌人招式按 Spire Codex 的 啃咬5 / 甩动7 / 猛晃1x3 / 变大+3力量 循环, 起始招取自录像当回合。",
+  "seed": 0,
+  "max_turns": 30,
+  "screen": "elite",
+  "player": {
+    "hp": 29,
+    "max_hp": 80,
+    "max_energy": 3,
+    "energy": 3,
+    "block": 0,
+    "deck": [
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy", "count": 2},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self", "count": 4},
+      {"name": "痛击+", "cost": 2, "damage": 10, "vulnerable": 3, "target_type": "AnyEnemy"},
+      {"name": "拆卸", "cost": 1, "damage": 8, "target_type": "AnyEnemy"},
+      {"name": "御血术", "cost": 1, "damage": 15, "target_type": "AnyEnemy"},
+      {"name": "飞剑回旋镖+", "cost": 1, "damage": 3, "hits": 4, "target_type": "AllEnemies"},
+      {"name": "剑柄打击", "cost": 1, "damage": 9, "draw": 1, "target_type": "AnyEnemy"},
+      {"name": "燃烧契约", "cost": 1, "draw": 0, "target_type": "Self"},
+      {"name": "耸肩无视", "cost": 1, "block": 8, "draw": 1, "target_type": "Self"},
+      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
+      {"name": "巨像", "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "狂宴", "cost": 1, "damage": 10, "target_type": "AnyEnemy"}
+    ],
+    "hand": [
+      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
+      {"name": "飞剑回旋镖+", "cost": 1, "damage": 3, "hits": 4, "target_type": "AllEnemies"},
+      {"name": "耸肩无视", "cost": 1, "block": 8, "draw": 1, "target_type": "Self"},
+      {"name": "御血术", "cost": 1, "damage": 15, "target_type": "AnyEnemy"},
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy"}
+    ]
+  },
+  "relics": [
+    {"name": "燃烧之血", "description": "战斗结束时回复 6 点生命。", "effects": {}},
+    {"name": "松动羊毛剪", "description": "拾起时, 从牌组中移除 2 张牌。", "effects": {}},
+    {"name": "地精之角", "description": "击杀敌人时获得能量并抽牌。", "effects": {}}
+  ],
+  "enemies": [
+    {
+      "entity_id": "PHANTASMAL_GARDENER_0",
+      "name": "花园幽灵鳗",
+      "hp": 31,
+      "max_hp": 31,
+      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "attack", "damage": 1, "hits": 3},
+        {"type": "buff", "strength": 3},
+        {"type": "attack", "damage": 5},
+        {"type": "attack", "damage": 7}
+      ]
+    },
+    {
+      "entity_id": "PHANTASMAL_GARDENER_1",
+      "name": "花园幽灵鳗",
+      "hp": 28,
+      "max_hp": 28,
+      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "attack", "damage": 5},
+        {"type": "attack", "damage": 7},
+        {"type": "attack", "damage": 1, "hits": 3},
+        {"type": "buff", "strength": 3}
+      ]
+    },
+    {
+      "entity_id": "PHANTASMAL_GARDENER_2",
+      "name": "花园幽灵鳗",
+      "hp": 29,
+      "max_hp": 29,
+      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "attack", "damage": 7},
+        {"type": "attack", "damage": 1, "hits": 3},
+        {"type": "buff", "strength": 3},
+        {"type": "attack", "damage": 5}
+      ]
+    },
+    {
+      "entity_id": "PHANTASMAL_GARDENER_3",
+      "name": "花园幽灵鳗",
+      "hp": 26,
+      "max_hp": 26,
+      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "buff", "strength": 3},
+        {"type": "attack", "damage": 5},
+        {"type": "attack", "damage": 7},
+        {"type": "attack", "damage": 1, "hits": 3}
+      ]
+    }
+  ]
+}

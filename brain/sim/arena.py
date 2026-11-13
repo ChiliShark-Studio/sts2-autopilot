@@ -19,8 +19,10 @@ Policy = Callable[[dict[str, Any]], Any]
 
 def run_fight(deck: list[DeckCard], monsters: list[Monster], *, seed: int = 0,
               hp: int = 70, max_hp: int = 70, max_energy: int = 3,
-              max_turns: int = 60, policy: Policy = decide_state) -> FightResult:
-    fight = Fight(deck, monsters, hp=hp, max_hp=max_hp, max_energy=max_energy, seed=seed)
+              max_turns: int = 60, policy: Policy = decide_state,
+              screen: Optional[str] = None) -> FightResult:
+    fight = Fight(deck, monsters, hp=hp, max_hp=max_hp, max_energy=max_energy,
+                  seed=seed, screen=screen)
     return _play_fight(fight, max_turns=max_turns, policy=policy)
 
 
@@ -109,13 +111,14 @@ class BatchResult:
 
 def run_batch(deck: list[DeckCard], monsters_factory: Callable[[], list[Monster]], *,
               runs: int = 20, hp: int = 70, max_hp: int = 70,
-              policy: Optional[Policy] = None) -> BatchResult:
+              policy: Optional[Policy] = None, screen: Optional[str] = None) -> BatchResult:
     policy = policy or decide_state
     out = BatchResult()
     for seed in range(runs):
         # 每次运行创建新的敌人实例, 避免复用已改变的血量和行动状态.
         out.results.append(run_fight(
-            list(deck), monsters_factory(), seed=seed, hp=hp, max_hp=max_hp, policy=policy))
+            list(deck), monsters_factory(), seed=seed, hp=hp, max_hp=max_hp,
+            policy=policy, screen=screen))
     return out
 
 

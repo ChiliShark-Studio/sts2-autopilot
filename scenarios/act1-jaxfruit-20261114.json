@@ -1,0 +1,144 @@
+{
+  "name": "第一幕·闪光贾克斯果与飞蝇菌子（真机录像 2026-11-14）",
+  "description": "2026-11-14 第一幕第 8 层阵亡战: 铁甲战士 71/87 血、能量 3、牌组 9 张。真机里闪光贾克斯果每回合攻击 3 并叠 2 点力量（力量涨到 18 前我们就被打死了），我们一直在打防御。实测每回合计掉血 1/14/7/1/7/16/7/12/4: 贾克斯果的攻击始终是 3, 力量层数涨到 18 也没有反映在伤害上, 因此按固定 3 点建模; 飞蝇菌子的 Debuff 效果录像看不出, 按无行动近似。",
+  "seed": 0,
+  "max_turns": 30,
+  "screen": "monster",
+  "player": {
+    "hp": 71,
+    "max_hp": 87,
+    "max_energy": 3,
+    "energy": 3,
+    "block": 0,
+    "deck": [
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "痛击",
+        "cost": 2,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "黑暗之拥+",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "target_type": "AnyEnemy"
+      }
+    ],
+    "hand": [
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "黑暗之拥+",
+        "cost": 1,
+        "hits": 1,
+        "target_type": "Self"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "hits": 1,
+        "block": 5,
+        "target_type": "Self"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "hits": 1,
+        "block": 5,
+        "target_type": "Self"
+      },
+      {
+        "name": "痛击",
+        "cost": 2,
+        "damage": 8,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      }
+    ]
+  },
+  "relics": [
+    {
+      "name": "燃烧之血",
+      "description": "在战斗结束时，回复6点生命。",
+      "effects": {}
+    },
+    {
+      "name": "松动羊毛剪",
+      "description": "拾起时，从你的牌组中移除2张牌并失去16点生命。",
+      "effects": {}
+    }
+  ],
+  "enemies": [
+    {
+      "entity_id": "JAXFRUIT_0",
+      "name": "闪光贾克斯果",
+      "hp": 33,
+      "max_hp": 33,
+      "intents": [
+        {
+          "type": "attack",
+          "damage": 3
+        }
+      ],
+      "repeat": true
+    },
+    {
+      "entity_id": "FLYSHROOM_0",
+      "name": "飞蝇菌子",
+      "hp": 47,
+      "max_hp": 47,
+      "intents": [
+        {
+          "type": "attack",
+          "damage": 8
+        },
+        {
+          "type": "wait"
+        },
+        {
+          "type": "attack",
+          "damage": 11
+        }
+      ],
+      "repeat": true
+    }
+  ]
+}

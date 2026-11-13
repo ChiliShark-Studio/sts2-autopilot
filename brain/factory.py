@@ -21,6 +21,7 @@ from .build.flow import BuildFlowTool
 from .build.select import BuildSelect
 from .combat.search import CombatSearchTool
 from .combat.select import CombatSelect
+from .combat.tempo_advisor import PowerAdvisor, TempoAdvisor
 from .map.router import MapRouterTool
 from .combat.potion_advisor import PotionAdvisor
 from .strategy.context import StrategyContext
@@ -40,7 +41,9 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
         map_agent=MapAgent(MapRouterTool(client, context)),
         build_agent=BuildAgent(BuildFlowTool(client, context)),
         combat_agent=CombatAgent(CombatSearchTool(advisor=PotionAdvisor(client, context),
-                                                  rules=RuleBook.with_defaults())),
+                                                  rules=RuleBook.with_defaults(),
+                                                  tempo=TempoAdvisor(client),
+                                                  power=PowerAdvisor(client))),
         select_agent=SelectAgent(BuildSelect(client, context), CombatSelect()),
         strategy_context=context,
         journal=journal,

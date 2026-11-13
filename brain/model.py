@@ -99,6 +99,12 @@ class Card:
     dexterity: int = 0
     # 覆甲: 回合结束时按层数获得格挡.
     plated: int = 0
+    # 残酷: 易伤状态的敌人额外受伤的倍率 (0.25 = 再多 25%), 打出后整场生效.
+    cruelty: float = 0.0
+    # 痛殴: 随机烧掉一张攻击牌, 把它的伤害加到自己身上.
+    absorb_attack: bool = False
+    # 群体伤害: 评分时按多目标折算.
+    aoe: bool = False
     # 以生命为费用 (放血: 失去 3 点生命).
     hp_cost: int = 0
     # 每回合开始获得的能量 (薪火之源); 价值在后续回合.
@@ -169,6 +175,9 @@ class Card:
             effects=parsed.get("effects", ()),
             dexterity=parsed.get("dexterity", 0),
             plated=parsed.get("plated", 0),
+            cruelty=parsed.get("cruelty", 0.0),
+            absorb_attack=parsed.get("absorb_attack", False),
+            aoe=parsed.get("aoe", False),
             hp_cost=parsed.get("hp_cost", 0),
             per_turn_energy=parsed.get("per_turn_energy", 0),
             future_block_turns=parsed.get("future_block_turns", 0),

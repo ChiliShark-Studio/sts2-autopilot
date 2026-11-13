@@ -1,0 +1,62 @@
+{
+  "name": "暗港 Boss·灵魂异鱼（真机录像 2026-11-14）",
+  "description": "2026-11-14 第一幕 Boss 战的第一回合: 铁甲战士 39/83 血、能量 3、覆甲 4, 灵魂异鱼 211 血。手牌、牌组与遗物取自当时的桥接状态。Boss 的『策略』会把状态牌『呼唤』塞进牌组, 呼唤在回合结束时留在手里每张造成 6 点生命损失, 引擎已按状态牌建模。近似项: 覆甲 4 层未记录到玩家状态里 (引擎玩家侧没有覆甲); 真机第 3 回合是『攻击 7 + 塞 1 张呼唤』同回合, 这里拆成两回合; 第 4 回合的『强化』本来给 Boss 无实体 2 回合 (未建模), 按 +2 力量近似。",
+  "seed": 0,
+  "max_turns": 40,
+  "screen": "boss",
+  "player": {
+    "hp": 39,
+    "max_hp": 83,
+    "max_energy": 3,
+    "energy": 3,
+    "block": 0,
+    "deck": [
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy", "count": 2},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self", "count": 4},
+      {"name": "痛击+", "cost": 2, "damage": 10, "vulnerable": 3, "target_type": "AnyEnemy"},
+      {"name": "拆卸", "cost": 1, "damage": 8, "target_type": "AnyEnemy"},
+      {"name": "御血术", "cost": 1, "damage": 15, "target_type": "AnyEnemy"},
+      {"name": "飞剑回旋镖+", "cost": 1, "damage": 3, "hits": 4, "target_type": "AllEnemies"},
+      {"name": "剑柄打击", "cost": 1, "damage": 9, "draw": 1, "target_type": "AnyEnemy"},
+      {"name": "燃烧契约", "cost": 1, "target_type": "Self"},
+      {"name": "耸肩无视", "cost": 1, "block": 8, "draw": 1, "target_type": "Self", "count": 2},
+      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
+      {"name": "巨像", "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "狂宴", "cost": 1, "damage": 10, "target_type": "AnyEnemy"},
+      {"name": "旋风斩", "cost": "X", "hits_x": true, "damage": 5, "target_type": "AllEnemies"},
+      {"name": "武装", "cost": 1, "block": 5, "target_type": "Self"}
+    ],
+    "hand": [
+      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy"},
+      {"name": "剑柄打击", "cost": 1, "damage": 9, "draw": 1, "target_type": "AnyEnemy"},
+      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
+      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self"},
+      {"name": "燃烧契约", "cost": 1, "target_type": "Self"}
+    ]
+  },
+  "relics": [
+    {"name": "燃烧之血", "description": "战斗结束时回复 6 点生命。", "effects": {}},
+    {"name": "松动羊毛剪", "description": "拾起时, 从牌组中移除 2 张牌。", "effects": {}},
+    {"name": "地精之角", "description": "击杀敌人时获得能量并抽牌。", "effects": {}},
+    {"name": "护喉甲", "description": "战斗开始时获得格挡。", "effects": {}}
+  ],
+  "enemies": [
+    {
+      "entity_id": "SOUL_FYSH_0",
+      "name": "灵魂异鱼",
+      "hp": 211,
+      "max_hp": 211,
+      "repeat": true,
+      "repeat_from": 0,
+      "intents": [
+        {"type": "custom", "handler": "add_beckon", "params": {"count": 2, "pile": "draw_pile"}},
+        {"type": "attack", "damage": 16},
+        {"type": "custom", "handler": "add_beckon", "params": {"count": 1, "pile": "draw_pile"}},
+        {"type": "attack", "damage": 7},
+        {"type": "buff", "strength": 2},
+        {"type": "attack", "damage": 13},
+        {"type": "attack", "damage": 19}
+      ]
+    }
+  ]
+}

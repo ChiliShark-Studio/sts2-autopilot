@@ -76,20 +76,25 @@ class Scenario:
     # 录像场景: 重放时可以给定"当前手牌"和"已装备遗物", 不必依赖抽牌顺序.
     starting_hand: list[DeckCard] = field(default_factory=list)
     relics: list[dict[str, Any]] = field(default_factory=list)
+    # 战斗类型 (monster / elite / boss): 战斗算法按它调整血量权重.
+    screen: str = "monster"
 
     def create_fight(self, seed: int) -> Fight:
         """每次使用独立敌人实例, 避免不同种子之间共享战斗状态."""
         phases = copy.deepcopy(self.phases)
         return Fight(self.deck, phases[0], following_phases=phases[1:], seed=seed,
                      starting_hand=copy.deepcopy(self.starting_hand) or None,
-                     **self.player)
+                     screen=self.screen, **self.player)
 
 
 def load(path: Path) -> Scenario:
     """读取场景, 未支持的字段或效果直接报错, 不默默降级."""
     raw = _object(json.loads(path.read_text(encoding="utf-8-sig")),
                   {"name", "description", "seed", "max_turns", "player", "enemies", "phases",
-                   "relics"}, "场景")
+                   "relics", "screen"}, "场景")
+    screen = _text(raw.get("screen", "monster"), "screen")
+    if screen not in {"monster", "elite", "boss"}:
+        raise ValueError("screen 只支持 monster, elite 或 boss")
     player = _object(raw.get("player"),
                      {"hp", "max_hp", "max_energy", "energy", "block", "draw_per_turn",
                       "status", "deck", "hand"},
@@ -226,11 +231,13 @@ def load(path: Path) -> Scenario:
             powers = _status(enemy.get("status", []), {"STRENGTH_POWER": "strength",
                              "VULNERABLE_POWER": "vulnerable", "WEAK_POWER": "weak",
                              # 硬化外壳: 每回合掉血上限; 初始额度由 Monster 同步.
-                             "HARDENED_SHELL_POWER": "hp_loss_cap"}, f"{where}.status")
+                             "HARDENED_SHELL_POWER": "hp_loss_cap",
+                             # 胆小: 每回合第一次被命中时获得的格挡.
+                             "SKITTISH_POWER": "skittish"}, f"{where}.status")
             monsters.append(Monster(name=_text(enemy.get("name"), f"{where}.name"), hp=enemy_hp,
                                     max_hp=enemy_max, block=_int(enemy.get("block", 0), f"{where}.block"),
                                     script=script, entity_id=entity_id, repeat=repeat,
-                                    repeat_from=repeat_from, **powers))
+                                    repeat_from=repeat_from, kind=screen, **powers))
         phases.append(monsters)
     description = raw.get("description", "")
     if not isinstance(description, str):
@@ -239,4 +246,4 @@ def load(path: Path) -> Scenario:
                     player=initial, deck=deck, phases=phases,
                     seed=_int(raw.get("seed", 0), "seed"),
                     max_turns=_int(raw.get("max_turns", 60), "max_turns", 1),
-                    starting_hand=starting_hand, relics=relics)
+                    starting_hand=starting_hand, relics=relics, screen=screen)

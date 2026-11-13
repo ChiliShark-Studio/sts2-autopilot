@@ -19,6 +19,39 @@ WOUND = DeckCard(
     description="不能被打出.",
 )
 
+# 呼唤: 第一幕 Boss 灵魂异鱼用"策略"意图塞进手牌的状态牌.
+# 游戏内文本: "在你的回合结束时，如果这张牌在你的手牌中，你失去6点生命。"
+BECKON = DeckCard(
+    name="呼唤", id="BECKON", cost=1, target="None", playable=True, end_turn_damage=6,
+    description="在你的回合结束时，如果这张牌在你的手牌中，你失去6点生命。",
+)
+
+
+def validate_beckon(params: Any) -> None:
+    """只接受明确的数量和目标牌堆."""
+    if not isinstance(params, dict) or params.keys() != {"count", "pile"}:
+        raise ValueError("add_beckon.params 必须且只能包含 count 和 pile")
+    if type(params["count"]) is not int or params["count"] < 1:
+        raise ValueError("add_beckon.count 必须是大于等于 1 的整数")
+    if params["pile"] not in ("draw_pile", "discard_pile"):
+        raise ValueError("add_beckon.pile 只支持 draw_pile 或 discard_pile")
+
+
+def preview_beckon(fight: Fight, monster: Monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    pile = "抽牌堆" if params["pile"] == "draw_pile" else "弃牌堆"
+    return [{"type": "StatusCard", "label": str(params["count"]),
+             "description": f"将 {params['count']} 张呼唤加入{pile}."}]
+
+
+def execute_beckon(fight: Fight, monster: Monster, params: dict[str, Any]) -> None:
+    pile = fight.draw_pile if params["pile"] == "draw_pile" else fight.discard
+    for _ in range(params["count"]):
+        card = replace(BECKON)
+        if params["pile"] == "draw_pile":
+            pile.insert(fight.rng.randrange(len(pile) + 1), card)
+        else:
+            pile.append(card)
+
 
 def validate_infection(params: Any) -> None:
     """只接受明确的数量和目标牌堆, 在加载文件时发现配置错误."""
@@ -116,6 +149,11 @@ CUSTOM_INTENTS = {
         "validate": validate_infection,
         "preview": preview_infection,
         "execute": execute_infection,
+    },
+    "add_beckon": {
+        "validate": validate_beckon,
+        "preview": preview_beckon,
+        "execute": execute_beckon,
     },
     "gain_plow": {
         "validate": _validate_gain_plow,

@@ -29,6 +29,29 @@ WHIRL = ("旋风斩", "对所有敌人造成5点伤害X次。")
 BODY_SLAM = ("全身撞击", "造成你当前格挡值的伤害。")
 
 
+PYRE = ("薪火之源", "在回合开始时，获得[ironclad_energy_icon.png]。")
+STONE = ("岩石铠甲", "获得4层覆甲。")
+
+
+class EngineDetectionTests(unittest.TestCase):
+    """引擎判定要按效果, 不能只认牌名表."""
+
+    def test_energy_engine_is_detected(self):
+        # 复盘: 已有一张薪火之源时 engine_cards 仍是空的, 模型因此又拿了一张.
+        st = GameState.parse(state(STRIKE, PYRE, PYRE))
+        report = deck_report(st)
+        self.assertIn("薪火之源", report["engine_cards"])
+        self.assertNotIn("引擎", report["missing"])
+
+    def test_plated_power_counts_as_engine(self):
+        st = GameState.parse(state(STRIKE, STONE))
+        self.assertIn("岩石铠甲", deck_report(st)["engine_cards"])
+
+    def test_duplicates_are_reported(self):
+        st = GameState.parse(state(STRIKE, STRIKE, PYRE))
+        self.assertEqual(deck_report(st)["duplicates"], {"打击": 2})
+
+
 class ReportTests(unittest.TestCase):
     def test_reports_missing_engine(self):
         st = GameState.parse(state(STRIKE, STRIKE, DEFEND))
