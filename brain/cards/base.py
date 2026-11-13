@@ -26,6 +26,10 @@ class BaseCard(ABC):
     base_name: ClassVar[str]
     type: ClassVar[CardType]
     cost: ClassVar[int]
+    cost_x: ClassVar[bool] = False
+    hits_x: ClassVar[bool] = False
+    # False 表示基础版，True 表示升级版；仅登记已经录入的版本，不推测缺失数据。
+    known_versions: ClassVar[tuple[bool, ...]] = (False, True)
 
     @property
     def name(self) -> str:

@@ -87,7 +87,7 @@ class EvaluationTests(unittest.TestCase):
         for raw in (request(["不存在的牌"]),
                     request([{"name": "特殊牌", "cost": 1, "teleport": True}]),
                     request(["打击"], relics=[{"name": "未知遗物", "description": "神秘效果"}]),
-                    request(["旋风斩"])):
+                    request(["头槌"])):
             result = evaluate(raw)
             self.assertEqual(result["status"], "unsupported")
             self.assertTrue(result["coverage"]["missing"])
@@ -282,7 +282,7 @@ class RingedDeckTests(unittest.TestCase):
         self.assertNotIn("凶恶", fight.first_trigger)
 
     def test_thinking_ahead_draws_then_returns_selection_before_exhaust_draw(self):
-        from brain.tools.build_flow import card_score
+        from brain.build.scoring import card_score
         from brain.model import Card
 
         fight = self.make_fight(["深谋远虑", "防御", "打击", "痛击+", "耸肩无视+"], draw_by_turn=3)

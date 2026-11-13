@@ -1,4 +1,7 @@
-"""构筑工具：LLM 根据角色和完整局面选择，启发式处理离线与失败路径。
+"""构筑界面分派：供 BuildAgent 处理奖励、事件、篝火、宝箱、卡牌包和遗物选择。
+
+商店决策委托 build.shop，卡牌评分复用 build.scoring；本文件保留其他构筑场景的现有处理。
+每次仅返回一个动作，由游戏循环执行后重新读取状态；模型失败停止，离线运行使用现有启发式。
 
 流程基于真实对局中发现的两条规则:
 
@@ -25,82 +28,16 @@ from ..actions import (
     SelectBundle,
     SelectCardReward,
     SelectRelic,
-    ShopPurchase,
     SkipCardReward,
     SkipRelicSelection,
 )
 from ..contracts import WAIT, Decision, DecisionRequest, Source
-from ..model import Card
-from .strategy import LLM_ATTEMPTS, StrategyContext, choose, no_decision
+from ..strategy.choice import LLM_ATTEMPTS, choose, no_decision
+from ..strategy.context import StrategyContext
+from .scoring import _card_dict_value, card_score
+from .shop import ShopDecision
 
-RARITY_BONUS = {"Basic": 0.0, "Common": 0.3, "Uncommon": 0.9, "Rare": 1.8}
 SKIP_THRESHOLD = 2.0
-# 依靠效果发挥价值的牌 (能力牌, 运转核心) 也需要最低评分,
-# 否则会得到 0 分, 被轻易丢弃或变化.
-BASE_VALUE = 1.0
-TYPE_BONUS = {"power": 1.5}
-
-
-def card_score(card: Card) -> float:
-    """按每点能量的收益评分, 加少量稀有度奖励, 刻意保持简单.
-
-    能力牌的成长 (力量 / 敏捷 / 覆甲) 没有直接的伤害或格挡数值,
-    只看数值会把它们评成 0 分, 进而被弃牌和"变化"轻易丢掉.
-    以生命为费用的牌则要扣除代价, 避免把掉血当成免费.
-    """
-    cost = max(1, card.cost)
-    value = BASE_VALUE + card.damage * card.hits + card.block * 0.9
-    value += card.vulnerable * 3 + card.weak * 2 + card.draw * 2 + card.energy * 3
-    value += card.strength * 4 + card.dexterity * 3 + card.plated * 2
-    value -= card.hp_cost * 1.5
-    value += TYPE_BONUS.get(card.type.lower(), 0.0)
-    return value / cost + RARITY_BONUS.get(card.rarity, 0.0)
-
-
-# 决定弃牌时应更重视稀有度: 没有明显伤害或格挡数值的 Rare 牌
-# 通常是运转核心, 不应简单视为差牌.
-KEEP_WEIGHT = {"Basic": 0.0, "Common": 0.5, "Uncommon": 2.0, "Rare": 5.0}
-
-
-def discard_score(card: Card) -> float:
-    """分数越低, 越适合弃掉."""
-    return card_score(card) + KEEP_WEIGHT.get(card.rarity, 1.0)
-
-
-# 商店策略: 保留一定金币, 只购买明显有价值的卡牌.
-SHOP_RESERVE = 40
-SHOP_CARD_THRESHOLD = 3.0
-
-
-def _card_dict_value(card: dict) -> float:
-    """评估原始卡牌字典的价值, 卡牌包条目只携带文本数值."""
-    from ..effects import parse_card
-
-    parsed = parse_card(card)
-    cost = max(1, parsed["cost"])
-    value = parsed["damage"] * parsed["hits"] + parsed["block"] * 0.9
-    value += parsed["vulnerable"] * 3 + parsed["weak"] * 2 + parsed["draw"] * 2
-    value += (parsed.get("strength", 0) * 4 + parsed.get("dexterity", 0) * 3
-              + parsed.get("plated", 0) * 2 - parsed.get("hp_cost", 0) * 1.5)
-    return value / cost + RARITY_BONUS.get(card.get("rarity") or "", 0.0)
-
-
-def _shop_card_value(item: dict) -> float:
-    """从商店卡牌的描述文本评分, 该处没有结构化数值字段."""
-    from ..effects import parse_card
-
-    parsed = parse_card({
-        "description": item.get("card_description") or "",
-        "cost": item.get("card_cost") or "1",
-        "rarity": item.get("card_rarity") or "",
-    })
-    cost = max(1, parsed["cost"])
-    value = parsed["damage"] * parsed["hits"] + parsed["block"] * 0.9
-    value += parsed["vulnerable"] * 3 + parsed["weak"] * 2 + parsed["draw"] * 2
-    value += (parsed.get("strength", 0) * 4 + parsed.get("dexterity", 0) * 3
-              + parsed.get("plated", 0) * 2 - parsed.get("hp_cost", 0) * 1.5)
-    return value / cost + RARITY_BONUS.get(item.get("card_rarity") or "", 0.0)
-
 
 _HP_LOSS = re.compile(r"失去\s*(\d+)\s*点(?:最大)?生命")
 _MAX_HP_LOSS = re.compile(r"失去\s*(\d+)\s*点最大生命")
@@ -166,14 +103,14 @@ class BuildFlowTool:
         self.client = client
         self.context = context if context is not None else StrategyContext()
         self._pending_card_open = False
-        self._shop_bought = False
+        self._shop = ShopDecision(self.context, self._choose, tool=self.name)
         self._location = None
 
     def decide(self, request: DecisionRequest) -> Decision:
         location = (request.state.run.act, request.state.run.floor)
         if location != self._location:
             self._pending_card_open = False
-            self._shop_bought = False
+            self._shop.reset()
             self._location = location
         if request.scene == "card_reward":
             return self._card_reward(request)
@@ -186,7 +123,7 @@ class BuildFlowTool:
         if request.scene == "treasure":
             return self._treasure(request)
         if request.scene == "shop":
-            return self._shop(request)
+            return self._shop.decide(request)
         if request.scene == "bundle_select":
             return self._bundle(request)
         if request.scene == "relic_select":
@@ -330,106 +267,6 @@ class BuildFlowTool:
         if treasure.get("can_proceed"):
             return Decision(action=Proceed(), reason="离开宝箱", source=Source.SCRIPT, tool=self.name)
         return WAIT
-
-    def _shop(self, request: DecisionRequest) -> Decision:
-        """LLM 每次选择一笔购买或离开；离线仍使用简单购卡策略。"""
-        shop = request.state.raw.get("shop") or {}
-        if not shop or shop.get("error"):
-            return WAIT
-        player = request.state.player
-        full = len(player.potions) >= player.max_potion_slots
-        items = [item for item in shop.get("items") or []
-                 if isinstance(item, dict) and item.get("is_stocked") and item.get("can_afford")
-                 and item.get("category") in {"card", "relic", "potion", "card_removal"}
-                 and 0 <= int(item.get("price") or 0) <= player.gold]
-        candidates = [(int(item.get("index", 0)), ShopPurchase(int(item.get("index", 0))), item)
-                      for item in items if item.get("category") != "potion" or not full]
-        # 商店库存展开时 proceed 可能未启用；桥接的 proceed 会先关闭库存再离开。
-        candidates.append((-1, Proceed(), {"说明": "留钱并离开商店"}))
-        if full and player.max_potion_slots > 0:
-            potions = [item for item in items if item.get("category") == "potion"]
-            if potions:
-                for potion in player.potions:
-                    candidates.append((-2 - potion.slot, DiscardPotion(potion.slot),
-                                       {"说明": "先腾出槽位；下一步重新读取商品和金币后再决定购买",
-                                        "discard": asdict(potion), "incoming_potions": potions}))
-        # 不可购买的商品要显式告诉模型原因: 否则它会反复选择售罄的删牌服务.
-        unavailable = []
-        for item in shop.get("items") or []:
-            if not isinstance(item, dict):
-                continue
-            index = item.get("index")
-            if index is None:
-                continue
-            reason = None
-            if not item.get("is_stocked"):
-                reason = "已售罄"
-            elif item.get("category") == "potion" and full:
-                reason = "药水槽已满"
-            elif not item.get("can_afford") or int(item.get("price") or 0) > player.gold:
-                reason = "金币不足"
-            if reason:
-                unavailable.append({"index": index, "category": item.get("category"),
-                                    "price": item.get("price"), "reason": reason})
-        decision = self._choose(
-            request,
-            "商店：比较买卡、遗物、药水、删牌与留钱；删牌需先购买服务再选择要删除的牌。"
-            "优先级从高到低："
-            "① 补齐 combos_missing 里的组合另一半，或补齐牌组完全缺失的主线引擎——"
-            "这类是赢法本身，金币够就先拿，不要为了删牌推迟；"
-            "② 删牌（牌组还有基础打击/防御时）；"
-            "③ 能立刻提升当前主线的遗物（力量/易伤/攻击倍率、格挡/减伤、能量/抽牌）；"
-            "④ 普通补强牌；⑤ 填充牌不买。"
-            "删牌价格会随已删次数上涨（A0-5 为 75/100/125…，A6 起 100/150/200…），"
-            "按标价判断值不值，不要按固定 75 金估算。"
-            "买任何东西之后都要留下一次删牌的钱（situation.shop.next_removal_price）；"
-            "金币不够同时买引擎和删牌时，先买引擎，下次再删。"
-            "notes.shop_unavailable 列出买不了的商品及原因（售罄/金币不足/药水槽满），"
-            "这些商品不在候选里，不要选择它们。",
-            candidates,
-            notes={"shop_unavailable": unavailable} if unavailable else None)
-        if decision is not None:
-            if isinstance(decision.action, ShopPurchase):
-                self._shop_bought = True
-                if self._is_removal(request, decision.action):
-                    self.context.removals += 1
-            return decision
-
-        if self._shop_bought:
-            self._shop_bought = False
-            return Decision(action=Proceed(), reason="离开商店", source=Source.SCRIPT, tool=self.name)
-
-        gold = request.state.player.gold
-        best: Optional[tuple[float, dict]] = None
-        for item in shop.get("items") or []:
-            if not isinstance(item, dict):
-                continue
-            if item.get("category") != "card" or not item.get("is_stocked") or not item.get("can_afford"):
-                continue
-            price = int(item.get("price") or 0)
-            if price > gold - SHOP_RESERVE:
-                continue
-            value = _shop_card_value(item)
-            if value >= SHOP_CARD_THRESHOLD and (best is None or value > best[0]):
-                best = (value, item)
-
-        if best is not None:
-            value, item = best
-            self._shop_bought = True
-            return Decision(action=ShopPurchase(int(item.get("index", 0))),
-                            reason=f"买 {item.get('card_name')}（{value:.1f}，{item.get('price')}金）",
-                            source=Source.HEURISTIC, tool=self.name)
-
-        self._shop_bought = False
-        return Decision(action=Proceed(), reason="没有值得买的，离开", source=Source.SCRIPT, tool=self.name)
-
-    def _is_removal(self, request: DecisionRequest, action) -> bool:  # noqa: ANN001
-        """判断这次购买是不是删牌服务 (用于累计涨价次数)."""
-        index = getattr(action, "index", None)
-        for item in (request.state.raw.get("shop") or {}).get("items") or []:
-            if isinstance(item, dict) and item.get("index") == index:
-                return item.get("category") == "card_removal"
-        return False
 
     def _bundle(self, request: DecisionRequest) -> Decision:
         """选择总价值最高的卡牌包, 然后确认."""

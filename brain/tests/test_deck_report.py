@@ -5,8 +5,9 @@ from __future__ import annotations
 import unittest
 
 from brain.model import GameState
-from brain.tools.strategy import (ENGINE_CARDS, character_prompt, deck_report,
-                                  situation, StrategyContext)
+from brain.strategy.situation import ENGINE_CARDS, deck_report, situation
+from brain.strategy.prompts import character_prompt
+from brain.strategy.context import StrategyContext
 
 
 def state(*cards, hp=50, max_hp=80):

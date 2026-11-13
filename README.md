@@ -31,11 +31,13 @@ brain/
 ├── contracts.py     DecisionRequest / Decision（JSON 形状，可直译 C#）
 ├── ports.py         GamePort / ToolPort —— 两个接缝
 ├── router.py        界面 → 谁负责决策
-├── agents/          game（循环）/ map / build / combat
-├── cards/           每种卡牌的子类、类型与效果声明
+├── agents/          game（循环）/ map / build / combat / select（选牌场景分派与确认）
+├── cards/           每种卡牌的子类、已知版本、数值与效果声明
 ├── combat/          战斗搜索 / 共享结算 / 敌人规则 / 药水顾问 / 真实战斗会话
-├── sim/             完整战斗模拟、竞技场与独立四维评估器
-├── tools/           map_router（LLM）/ build_flow / select_tool
+├── sim/             战斗模拟、牌组装配、竞技场与独立四维评估器
+├── map/             地图规划、路线校验与风险复核
+├── build/           构筑界面分派、商店决策、永久选牌与共用卡牌评分
+├── strategy/        本局上下文、角色提示、局面输入与模型候选选择
 ├── transport.py     HTTP 桥接实现
 ├── replay.py        JSONL 日志，可离线重放
 ├── model.py         类型化状态（Card / Enemy / Battle / MapState …）

@@ -7,8 +7,9 @@ import unittest
 
 from brain.contracts import DecisionKind, DecisionRequest
 from brain.model import GameState
-from brain.tools.build_flow import BuildFlowTool
-from brain.tools.strategy import StrategyContext, removal_price, situation
+from brain.build.flow import BuildFlowTool
+from brain.strategy.context import StrategyContext
+from brain.strategy.situation import removal_price, situation
 
 SHOP = {
     "state_type": "shop", "run": {"act": 1, "floor": 5, "ascension": 0},

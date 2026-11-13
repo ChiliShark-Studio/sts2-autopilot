@@ -16,7 +16,7 @@ def _rules() -> dict[str, tuple[Card, Card]]:
     path = Path(__file__).resolve().parents[1] / "data/cards/ironclad.json"
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     rules = {}
-    for name in ("打击", "防御", "痛击", "耸肩无视", "武装"):
+    for name in ("打击", "防御", "痛击", "耸肩无视", "武装", "旋风斩"):
         base = Card.parse(data[name]["base"])
         upgraded = Card.parse(data[name]["upgraded"])
         rules[name] = rules[base.id] = (base, upgraded)

@@ -10,6 +10,7 @@ from typing import Any
 
 from .engine import DeckCard, Fight, Intent, Monster
 from .special_intents import CUSTOM_INTENTS
+from ..cards import find_card
 
 
 def _object(value: Any, allowed: set[str], where: str) -> dict:
@@ -102,16 +103,25 @@ def load(path: Path) -> Scenario:
     numeric = {"cost", "damage", "hits", "block", "vulnerable", "weak", "draw", "energy"}
     for index, entry in enumerate(_items(player.get("deck"), "player.deck")):
         where = f"player.deck[{index}]"
-        card = _object(entry, numeric | {"name", "count", "target_type", "exhaust"}, where)
-        values = {key: _int(value, f"{where}.{key}", 1 if key == "hits" else 0)
+        card = _object(entry, numeric | {"name", "count", "target_type", "exhaust", "cost_x", "hits_x"}, where)
+        raw_x = isinstance(card.get("cost"), str) and card["cost"].strip().upper() == "X"
+        cost_x = _bool(card.get("cost_x", False), f"{where}.cost_x") or raw_x
+        definition = find_card(str(card.get("name") or "")) if cost_x else None
+        hits_x = _bool(card.get("hits_x", bool(definition and definition.hits_x)), f"{where}.hits_x")
+        if cost_x and not hits_x:
+            raise ValueError(f"{where} 的 X 费效果尚未支持；当前只接入按 X 次重复攻击")
+        values = {key: 0 if key == "cost" and raw_x else _int(value, f"{where}.{key}", 1 if key == "hits" else 0)
                   for key, value in card.items() if key in numeric}
         default_target = "AnyEnemy" if any(values.get(k, 0) for k in ("damage", "weak", "vulnerable")) else "Self"
+        if definition is not None:
+            default_target = definition.simulation_fields().get("target", default_target)
         target = _text(card.get("target_type", default_target), f"{where}.target_type")
-        if target not in {"AnyEnemy", "Self"}:
-            raise ValueError(f"{where}.target_type 暂只支持 AnyEnemy 或 Self")
+        if target not in {"AnyEnemy", "AllEnemies", "Self"}:
+            raise ValueError(f"{where}.target_type 暂只支持 AnyEnemy、AllEnemies 或 Self")
         if target == "Self" and any(values.get(k, 0) for k in ("damage", "weak", "vulnerable")):
             raise ValueError(f"{where} 的伤害和敌方负面效果必须指定 AnyEnemy")
         template = DeckCard(name=_text(card.get("name"), f"{where}.name"), target=target,
+                            cost_x=cost_x, hits_x=hits_x,
                             exhaust=_bool(card.get("exhaust", False), f"{where}.exhaust"), **values)
         deck.extend([template] * _int(card.get("count", 1), f"{where}.count", 1))
 

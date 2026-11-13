@@ -1,4 +1,7 @@
-"""地图工具: 开局规划整条路线, 到分叉点再重新规划; 启发式作为兜底.
+"""地图决策：供 MapAgent 规划和执行可见路线，检查计划合法性并复核精英风险。
+
+本文件保留地图决策的现有内部结构；本局计划使用共享上下文，风险模拟由 brain.sim 提供。
+有模型时连续无效回复会停止，离线运行使用现有启发式；本文件只返回动作，不直接操作游戏。
 
 逐步询问模型有两个问题: 单选项节点也要调用一次, 而且每次只看下一跳,
 容易为眼前收益走偏. 因此这里把路线当成一次规划:
@@ -7,8 +10,8 @@
   * 唯一可选节点直接前进, 不调用模型.
   * 计划用完 (到达分叉点) 或计划失效 (目标不可达) 时才重新规划一次.
 
-模型返回的坐标序列必须与地图节点和连边一致, 否则退回启发式,
-避免把不存在的节点传给游戏.
+模型返回的坐标序列必须与地图节点和连边一致；无效回复按既有重试规则处理，
+避免把不存在的节点传给游戏。
 """
 
 from __future__ import annotations
@@ -20,7 +23,10 @@ from ..actions import ChooseMapNode
 from ..contracts import WAIT, Decision, DecisionRequest, Source
 from ..llm import LLMClient
 from ..model import GameState
-from .strategy import LLM_ATTEMPTS, StrategyContext, character_prompt, no_decision, situation
+from ..strategy.choice import LLM_ATTEMPTS, no_decision
+from ..strategy.context import StrategyContext
+from ..strategy.prompts import character_prompt
+from ..strategy.situation import situation
 
 NodeKey = tuple[int, int]
 

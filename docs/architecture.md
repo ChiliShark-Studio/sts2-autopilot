@@ -20,7 +20,7 @@
 
 ### 当前实施顺序与 LLM 接入
 
-先完成选路和构筑 LLM 接入，再实现可信模拟器与工具调用。当前通过 `tools/strategy.py` 统一角色提示、完整局面和候选选择；铁甲战士已使用基础构筑原则，其他角色暂用通用提示，经过当前版本核实的攻略仍待整理。
+先完成选路和构筑 LLM 接入，再实现可信模拟器与工具调用。当前通过 `strategy/` 统一角色提示、完整局面和候选选择；铁甲战士已使用基础构筑原则，其他角色暂用通用提示，经过当前版本核实的攻略仍待整理。
 
 模型接收 `situation / task / candidates`，返回 `choice / reason / build_plan`；程序只接受候选中的整数编号，将其映射回已有动作，并执行动作校验。卡牌奖励、商店、事件、药水、遗物、篝火与永久选牌分别生成候选，纯流程推进和确认仍由脚本处理。商店的 `can_proceed` 表示离开按钮状态，不能作为跳过购物的条件；库存展开时桥接的离开动作会先关闭库存。
 
@@ -67,10 +67,10 @@ flowchart TD
 | 模块 | 已有能力 | 与目标方案的差距 |
 |---|---|---|
 | `combat/search.py` | 单回合束搜索、自适应血量权重、部分状态和药水决策 | 不模拟抽牌后续和遗物触发，卡牌机制覆盖不完整 |
-| `build_flow.py` | LLM 奖励与药水取舍、事件、购物 / 删牌服务、遗物、篝火和卡牌包；失败或离线回退 | 尚未验证真实模型和游戏流程，攻略与模拟器待接入 |
-| `select_tool.py` | 非战斗选牌使用构筑 LLM；战斗选牌保留启发式；确认和避免重复选择由脚本处理 | 战斗选牌尚不理解复杂配合，真机流程待验证 |
-| `map_router.py` | LLM 路线选择、完整可见地图与构筑输入、启发式回退 | 尚未接入经版本核实的攻略与模拟器，真实选路效果待验证 |
-| `strategy.py` | 共用完整局面、角色基础提示、合法候选选择与本局构筑计划 | 当前没有其他角色专用资料，计划不跨进程持久化 |
+| `build/flow.py`、`build/shop.py` | LLM 奖励与药水取舍、事件、购物 / 删牌服务、遗物、篝火和卡牌包；商店独立处理，其他场景由构筑流程协调 | 尚未验证真实模型和游戏流程，攻略与模拟器待接入 |
+| `agents/select.py`、`build/select.py`、`combat/select.py` | 选牌入口处理确认并按场景分派；非战斗选牌使用构筑 LLM，战斗选牌保留启发式 | 战斗选牌尚不理解复杂配合，真机流程待验证 |
+| `map/router.py` | LLM 路线选择、完整可见地图与构筑输入、离线启发式和既有精英风险复核 | 经版本核实的攻略与可信风险预测仍待完善，真实选路效果待验证 |
+| `strategy/` | 共用完整局面、角色基础提示、合法候选选择与本局构筑计划 | 当前没有其他角色专用资料，计划不跨进程持久化 |
 | `sim/engine.py` | 抽牌、洗牌、基础效果、固定怪物脚本及部分特殊意图 | 不支持遗物和药水，不能完整复现卡牌、怪物与难度规则 |
 | `sim/arena.py` | 复用真实战斗决策入口，多种子批量运行并区分未完成 | 尚未提供 LLM 调用入口；结果分布与覆盖说明待补 |
 | `sim/scenario_file.py` | JSON 场景、分阶段敌人和受支持字段校验 | 尚未提供完整构筑与版本化遭遇输入 |
@@ -114,18 +114,35 @@ GameAgent（循环 + 路由）
           (LLM+兜底)   (LLM选牌+启发式)   (束搜索)
 ```
 
-战斗实现集中在 `brain/combat/`：`search.py` 选择动作，`effects.py` 供搜索和模拟器共用效果结算，`enemy_rules.py` 提供敌人机制与搜索修正，`potion_advisor.py` 处理特定条件下的药水模型咨询，`session.py` 接管真实游戏中的一场战斗。`combat/__init__.py` 不预加载这些实现。具体卡牌规则留在 `cards/`，完整战斗引擎和回测留在 `sim/`；搜索中的临时推演状态仍留在 `combat/search.py`。同时服务战斗和非战斗的 `SelectTool` 保留在 `tools/`。
+战斗实现集中在 `brain/combat/`：`search.py` 选择动作，`select.py` 处理战斗内临时选牌，`effects.py` 供搜索和模拟器共用效果结算，`enemy_rules.py` 提供敌人机制与搜索修正，`potion_advisor.py` 处理特定条件下的药水模型咨询，`session.py` 接管真实游戏中的一场战斗。`combat/__init__.py` 不预加载这些实现。具体卡牌规则留在 `cards/`，完整战斗引擎和回测留在 `sim/`；搜索中的临时推演状态仍留在 `combat/search.py`。
+
+原模拟目录中的 38 种牌已迁入 `cards/`，每种牌有独立子类，连同狂怒、恶魔形态共 40 种牌。注册表只登记类，数值目录从子类派生；仅提供已经录入的基础或升级版本。`sim/deck.py` 负责将定义装配为模拟器实例，原 `sim/ironclad.py` 已删除。当前只有狂怒和恶魔形态通过 `effects` 声明完整共享效果，其他模板仍通过数值字段结算；旋风斩另已修正动态 X 费，其余旧简化规则和严格覆盖限制保留。
+
+X 费由 `cost_x` 标记，按 X 重复攻击由 `hits_x` 声明，具体能力归卡牌类。`combat/effects.py` 提供共享的实际费用和命中次数计算，搜索与模拟器在实际出牌时读取当前能量；X 为零时不强制产生一次命中。旋风斩的群体目标在搜索和模拟器中都展开为当前存活敌人。评估器记录实际能量消耗，并将 X 费牌排除在固定牌面平均费用之外；未支持的其他 X 效果仍拒绝猜测。
+
+地图决策位于 `brain/map/router.py`，保留路线规划、校验和风险复核。构筑流程位于 `brain/build/flow.py`，将商店请求委托给 `shop.py`，卡牌评分由 `scoring.py` 供构筑、商店与选牌共用。商店只持有当前商店的购买标记，由构筑流程在位置变化时重置；购买删牌服务之后的弹窗仍由选牌入口处理。
+
+选牌入口 `brain/agents/select.py` 统一处理空状态、已选卡与确认，再通过一个战斗场景分支转交 `build/select.py` 或 `combat/select.py`。构筑选牌结合本局计划调用模型，战斗选牌只使用算法；原 `SelectTool` 已移除。场景判断沿用 `battle` 或玩家 `hand` 标记，点击与确认动作仍按手牌或网格弹窗区分，不改变桥接协议。
+
+`brain/strategy/` 按职责拆分共享实现：`context.py` 保存本局计划、路线与删牌次数，`prompts.py` 提供角色提示词，`situation.py` 整理局面输入和既有报告，`choice.py` 负责候选选择、合法性校验和重试。地图、构筑、选牌与药水顾问继续使用工厂创建的同一个上下文；游戏循环负责本局结束或菜单时重置。目录整理保持原有提示词、价格估算和决策行为。
 
 | 文件 | 职责 | 不该做的事 |
 |---|---|---|
 | `contracts.py` | 请求/决策的数据形状 | 不碰 I/O、不碰时间 |
 | `ports.py` | `GamePort` / `ToolPort` 协议 | 不含实现 |
 | `router.py` | `state_type` → 决策单元 | 不含策略 |
-| `agents/*.py` | 把请求转给工具 | 不含算法 |
+| `agents/*.py` | 转交决策请求；选牌入口同时处理共用确认流程 | 不评价具体候选 |
 | `combat/search.py` | 战斗动作搜索、临时状态推演与评分 | 不运行完整场战斗，不直接发动作 |
 | `combat/effects.py` | 共享效果执行、生效状态管理与事件分发 | 不定义具体卡牌规则，不选择动作 |
+| `cards/*.py`、`sim/deck.py` | 子类持有卡牌定义，装配器创建独立的模拟战斗实例 | 不推测未录入的升级，不扩大旧模拟规则覆盖 |
 | `combat/session.py` | 读取真实状态、调用 Agent 并发送动作，接管一场战斗 | 不实现出牌算法或奖励决策 |
-| `tools/*.py` | 选路、构筑与选牌工具 | 不直接发动作 |
+| `map/router.py` | 地图规划、路线校验和精英风险复核 | 不假定未知节点的具体敌人，不直接发动作 |
+| `build/flow.py`、`build/shop.py` | 构筑场景协调与独立商店决策 | 不处理后续选牌弹窗，不直接发动作 |
+| `build/scoring.py` | 离线构筑、商店与选牌共用评分 | 不定义卡牌规则，不替代四维评估或整场回测 |
+| `strategy/*.py` | 共享上下文、角色提示、局面输入和模型候选校验 | 不向游戏发送动作 |
+| `agents/select.py` | 选牌场景分派、空状态与确认 | 不评价该选哪张牌 |
+| `build/select.py` | 非战斗中的永久选牌，使用构筑模型或离线评分 | 不承担战斗内临时选牌 |
+| `combat/select.py` | 战斗内临时选牌，沿用现有升级与保留评分 | 不调用模型 |
 | `transport.py` | HTTP 桥接 | 不含决策 |
 | `replay.py` | 落盘/读回 | 不参与决策 |
 
@@ -152,8 +169,8 @@ GameAgent（循环 + 路由）
 | `model.py` | `GameSnapshot.cs`（现有 `/state` 的 DTO） | 低 |
 | `router.py` | `DecisionRouter.cs`（`switch (state_type)`） | 低 |
 | `combat/search.py` | `CombatSearch.cs`（纯计算，无依赖） | 中 |
-| `tools/map_router.py` | `MapRouter.cs`（`HttpClient` → OpenAI 兼容端点） | 中 |
-| `tools/build_flow.py` | `BuildFlow.cs` | 低 |
+| `map/router.py` | `MapRouter.cs`（`HttpClient` → OpenAI 兼容端点） | 中 |
+| `build/flow.py`、`build/shop.py` | `BuildFlow.cs` | 低 |
 | `agents/game.py` | `AutoPlayLoop.cs`（`Node._Process` + `CallDeferred`） | 中 |
 | `transport.py` | **不需要** —— 直接调内部 API | — |
 | `replay.py` | `JsonlJournal.cs`（`File.AppendAllText`） | 低 |

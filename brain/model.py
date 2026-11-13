@@ -135,6 +135,8 @@ class Card:
     # 应急按钮: "接下来的 N 回合内无法再从卡牌中获得格挡"
     no_block_turns: int = 0
     description: str = ""
+    cost_x: bool = False
+    hits_x: bool = False
 
     @classmethod
     def parse(cls, raw: Any, index: int = 0) -> "Card":
@@ -145,6 +147,8 @@ class Card:
             id=_s(d.get("id")),
             name=_s(d.get("name")),
             cost=parsed["cost"],
+            cost_x=parsed["cost_x"],
+            hits_x=parsed["hits_x"],
             type=parsed["type"],
             target_type=parsed["target_type"],
             can_play=parsed["can_play"] and parsed["star_cost"] <= 0,

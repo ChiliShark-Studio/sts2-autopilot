@@ -1,6 +1,6 @@
 """战斗共享效果结算：供动作搜索和完整战斗模拟器共同调用。
 
-负责执行效果、登记和叠加生效状态、恢复及导出状态，并按战斗流程发出的事件触发和清理效果。
+负责动态费用与命中次数、效果执行、生效状态管理，并按战斗流程发出的事件触发和清理效果。
 卡牌类声明具体规则；本文件不选择战斗动作，也不决定何时开始或结束回合。
 """
 
@@ -8,6 +8,16 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ..cards.effects import CardEffect, Effect, EffectKind, Event, TriggeredEffect
+
+
+def resolve_cost(cost: int, cost_x: bool, energy: int) -> int:
+    """X 费在实际出牌时消耗剩余能量，固定费用保持原值。"""
+    return max(0, energy) if cost_x else cost
+
+
+def resolve_hits(hits: int, hits_x: bool, energy: int) -> int:
+    """按 X 重复攻击时允许零次；普通攻击沿用至少一次的规则。"""
+    return max(0, energy) if hits_x else max(1, hits)
 
 
 @dataclass

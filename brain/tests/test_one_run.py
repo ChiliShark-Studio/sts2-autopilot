@@ -8,7 +8,7 @@ from brain.agents.build import BuildAgent
 from brain.agents.game import GameAgent, StopRun
 from brain.contracts import Decision
 from brain.model import GameState
-from brain.tools.build_flow import BuildFlowTool
+from brain.build.flow import BuildFlowTool
 
 
 class _StubAgent:
@@ -69,7 +69,7 @@ class RetryableErrorTests(unittest.TestCase):
 
     def test_missing_proceed_button_is_retried(self):
         from brain.transport import BridgeError
-        from brain.tools.build_flow import BuildFlowTool
+        from brain.build.flow import BuildFlowTool
 
         class Port:
             def __init__(self):

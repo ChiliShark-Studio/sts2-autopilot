@@ -18,6 +18,7 @@ from .cards import EffectKind, Event, card_effects, find_card
 
 # 造成 6 点伤害 / 造成3点伤害3次 / 造成 8 点伤害. 给予 2 层易伤.
 _DAMAGE = re.compile(r"造成\s*(\d+)\s*点伤害(?:[\s，,]*(\d+)\s*次)?")
+_X_HITS = re.compile(r"点伤害\s*[Xx]\s*次")
 _BLOCK = re.compile(r"获得\s*(\d+)\s*点格挡")
 _VULN = re.compile(r"给予\s*(\d+)\s*层易伤")
 _WEAK = re.compile(r"给予\s*(\d+)\s*层虚弱")
@@ -231,18 +232,27 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         if m and m.group(2):
             hits = _int(m.group(2))
     hits = max(1, hits or 1)
+    raw_cost = card.get("cost")
+    cost_x = str(raw_cost).strip().upper() == "X" or (raw_cost is None and definition is not None and definition.cost_x)
+    hits_x = bool(_X_HITS.search(desc)) or bool(cost_x and definition is not None and definition.hits_x)
+    target_type = card.get("target_type") or ""
+    if hits_x and not target_type and definition is not None:
+        target_type = definition.simulation_fields().get("target", "")
 
     return {
         "index": _int(card.get("index")),
         "id": card.get("id") or "",
         "name": card.get("name") or "",
-        "cost": _int(card.get("cost"), 1),
+        "cost": 0 if cost_x else _int(raw_cost, 1),
+        "cost_x": cost_x,
+        "hits_x": hits_x,
         "type": (card.get("type") or "").lower(),
-        "target_type": card.get("target_type") or "",
+        "target_type": target_type,
         # 星星是储君的资源, 当前未建模该资源,
         # 因此消耗星星的卡牌应视为不可打出, 避免尝试操作.
         "star_cost": _int(card.get("star_cost"), 0),
-        "can_play": bool(card.get("can_play", True)),
+        # 尚未声明如何按 X 结算的效果不能退回固定费用或固定收益。
+        "can_play": bool(card.get("can_play", True)) and (not cost_x or hits_x),
         "damage": damage,
         "hits": hits,
         # 每回合效果的格挡不是即时格挡; 没有这层区分会把它当成"打出时获得".

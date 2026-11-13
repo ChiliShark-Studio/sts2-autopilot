@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from ..model import Card
 from ..cards import BaseCard, Effect, Event, card_effects
-from ..combat.effects import ActiveEffect, apply_effects, emit, power_amount, power_statuses
+from ..combat.effects import ActiveEffect, apply_effects, emit, power_amount, power_statuses, resolve_cost, resolve_hits
 
 
 class IntentExhausted(Exception):
@@ -159,6 +159,8 @@ class DeckCard:
     per_vulnerable: int = 0
     # 灰烬打击: 消耗牌堆每张额外伤害.
     per_exhaust: int = 0
+    cost_x: bool = False
+    hits_x: bool = False
 
 
 @dataclass
@@ -277,7 +279,8 @@ class Fight:
         # 腐化: 技能牌 (无伤害牌) 费用变 0, 且打出后消耗.
         definition = card.definition
         corrupted = self.corruption and (definition.type == "skill" if definition else card.damage == 0)
-        cost = 0 if corrupted else card.cost
+        available = self.energy
+        cost = 0 if corrupted else resolve_cost(card.cost, card.cost_x, available)
         if not card.playable or cost > self.energy:
             return False
         # 昏眩: 本回合已经出过一张牌, 不能再出.
@@ -308,35 +311,39 @@ class Fight:
             alive = [m for m in self.monsters if m.alive]
             monster = alive[0] if alive else None
 
-        if (card.damage > 0 or card.scales_with_block or card.per_vulnerable) and monster is not None:
-            dealt = 0
-            # 按牌面缩放规则算出这张牌的伤害 (全身撞击/欺凌/灰烬打击).
-            base_damage = card.damage
-            if card.scales_with_block:
-                base_damage = self.block
-            if card.per_vulnerable and monster is not None:
-                base_damage += card.per_vulnerable * monster.vulnerable
-            if card.per_exhaust:
-                base_damage += card.per_exhaust * self.exhausted
-            for _ in range(max(1, card.hits)):
-                dmg = max(0, base_damage + self.strength)
-                if monster.vulnerable:
-                    # 残忍提高易伤额外倍率.
-                    dmg = int(dmg * (1.5 + self.cruelty))
-                # 滑溜: 每次命中只掉 1 点生命, 并消耗一层.
-                if monster.slippery > 0:
-                    dmg = 1
-                    monster.slippery -= 1
-                # 缓慢: 本回合每打出一张牌, 该敌人受到的攻击伤害 +10%.
-                if monster.has_slow and monster.slow:
-                    dmg = int(dmg * (1 + 0.1 * monster.slow))
-                absorbed = min(monster.block, dmg)
-                monster.block -= absorbed
-                hit = max(0, dmg - absorbed)
-                monster.hp -= hit
-                dealt += hit
-            # 受伤后可能触发敌人的击晕/阶段切换 (例如仪式兽).
-            monster.on_damaged(dealt)
+        targets = ([enemy for enemy in self.monsters if enemy.alive] if card.target.lower() == "allenemies"
+                   else [monster] if monster is not None else [])
+        hits = resolve_hits(card.hits, card.hits_x, available)
+        for monster in targets:
+            if (card.damage > 0 or card.scales_with_block or card.per_vulnerable) and hits > 0:
+                dealt = 0
+                # 按牌面缩放规则算出这张牌的伤害 (全身撞击/欺凌/灰烬打击).
+                base_damage = card.damage
+                if card.scales_with_block:
+                    base_damage = self.block
+                if card.per_vulnerable and monster is not None:
+                    base_damage += card.per_vulnerable * monster.vulnerable
+                if card.per_exhaust:
+                    base_damage += card.per_exhaust * self.exhausted
+                for _ in range(hits):
+                    dmg = max(0, base_damage + self.strength)
+                    if monster.vulnerable:
+                        # 残忍提高易伤额外倍率.
+                        dmg = int(dmg * (1.5 + self.cruelty))
+                    # 滑溜: 每次命中只掉 1 点生命, 并消耗一层.
+                    if monster.slippery > 0:
+                        dmg = 1
+                        monster.slippery -= 1
+                    # 缓慢: 本回合每打出一张牌, 该敌人受到的攻击伤害 +10%.
+                    if monster.has_slow and monster.slow:
+                        dmg = int(dmg * (1 + 0.1 * monster.slow))
+                    absorbed = min(monster.block, dmg)
+                    monster.block -= absorbed
+                    hit = max(0, dmg - absorbed)
+                    monster.hp -= hit
+                    dealt += hit
+                # 受伤后可能触发敌人的击晕/阶段切换 (例如仪式兽).
+                monster.on_damaged(dealt)
 
         if card.block > 0:
             gain = max(0, card.block + self.dexterity)
@@ -369,10 +376,11 @@ class Fight:
         if card.corruption:
             self.corruption = True
 
-        if card.vulnerable and monster is not None:
-            monster.vulnerable += card.vulnerable
-        if card.weak and monster is not None:
-            monster.weak += card.weak
+        for monster in targets:
+            if card.vulnerable:
+                monster.vulnerable += card.vulnerable
+            if card.weak:
+                monster.weak += card.weak
         if card.energy:
             self.energy += card.energy
         if card.draw:
@@ -480,7 +488,7 @@ class Fight:
                     definition.type.value if definition else ("Attack" if card.damage > 0 else "Skill")),
                 "name": card.name,
                 "is_upgraded": definition.upgraded if definition is not None else card.name.endswith("+"),
-                "cost": str(card.cost),
+                "cost": "X" if card.cost_x else str(card.cost),
                 "damage": card.damage,
                 "block": card.block,
                 "hits": card.hits,
@@ -489,10 +497,10 @@ class Fight:
                 "draw": card.draw,
                 "energy": card.energy,
                 "target_type": card.target,
-                "can_play": (card.playable and card.cost <= self.energy
+                "can_play": (card.playable and resolve_cost(card.cost, card.cost_x, self.energy) <= self.energy
                              and not (self.ringing_active and self.turn_cards_played >= 1)),
                 "unplayable_reason": "HasUnplayableKeyword" if not card.playable else None,
-                "description": card.description,
+                "description": card.description or (f"造成{card.damage}点伤害X次。" if card.hits_x else ""),
             })
 
         enemies = []

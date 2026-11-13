@@ -17,12 +17,13 @@ from .agents.select import SelectAgent
 from .combat.enemy_rules import RuleBook
 from .llm import LLMClient
 from .replay import Journal
-from .tools.build_flow import BuildFlowTool
+from .build.flow import BuildFlowTool
+from .build.select import BuildSelect
 from .combat.search import CombatSearchTool
-from .tools.map_router import MapRouterTool
+from .combat.select import CombatSelect
+from .map.router import MapRouterTool
 from .combat.potion_advisor import PotionAdvisor
-from .tools.select_tool import SelectTool
-from .tools.strategy import StrategyContext
+from .strategy.context import StrategyContext
 from .transport import Bridge
 
 DEFAULT_BASE = "http://127.0.0.1:15526"
@@ -40,7 +41,7 @@ def build_agent(base: str = DEFAULT_BASE, *, offline: bool = False,
         build_agent=BuildAgent(BuildFlowTool(client, context)),
         combat_agent=CombatAgent(CombatSearchTool(advisor=PotionAdvisor(client, context),
                                                   rules=RuleBook.with_defaults())),
-        select_agent=SelectAgent(SelectTool(client, context)),
+        select_agent=SelectAgent(BuildSelect(client, context), CombatSelect()),
         strategy_context=context,
         journal=journal,
         stop_after_run=stop_after_run,

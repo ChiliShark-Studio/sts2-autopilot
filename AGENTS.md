@@ -41,11 +41,13 @@ brain/               决策层
   contracts.py       DecisionRequest / Decision（JSON 形状，可直译 C#）
   ports.py           GamePort / ToolPort
   router.py          界面 → 谁负责决策
-  agents/            game 循环 + map / build / combat / select
-  cards/             卡牌子类、类型与效果声明
-  combat/            search(束搜索) / effects(结算) / enemy_rules / potion_advisor / session
-  tools/             map_router(LLM) / build_flow / select_tool
-  sim/               离线战斗引擎 + 竞技场
+  agents/            game 循环 + map / build / combat / select(选牌场景分派与确认)
+  cards/             卡牌子类、已知版本、数值与效果声明
+  combat/            search(束搜索) / select(战斗选牌) / effects(结算) / enemy_rules / potion_advisor / session
+  map/               地图规划、路线校验与风险复核
+  build/             flow(构筑界面分派) / shop(商店决策) / select(永久选牌) / scoring(共用评分)
+  strategy/          context(本局上下文) / prompts / situation / choice
+  sim/               离线战斗引擎 + 竞技场；deck.py 从统一卡牌集装配牌组
   replay.py          JSONL 日志
   cli.py             命令入口（中文注释）
 tools/               ApiProbe（反射探针）、mock_llm、extract_combat

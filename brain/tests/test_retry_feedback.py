@@ -9,7 +9,8 @@ from brain.contracts import DecisionKind, DecisionRequest
 from brain.llm import make_mock_client
 from brain.model import GameState
 from brain.actions import Proceed
-from brain.tools.strategy import StrategyContext, choose
+from brain.strategy.context import StrategyContext
+from brain.strategy.choice import choose
 
 
 def _state() -> GameState:
@@ -87,7 +88,7 @@ class ShopUnavailableTests(unittest.TestCase):
 
     def test_sold_out_item_is_reported_with_reason(self):
         from brain.contracts import DecisionKind
-        from brain.tools.build_flow import BuildFlowTool
+        from brain.build.flow import BuildFlowTool
 
         client = make_mock_client({})
         payloads: list[dict] = []

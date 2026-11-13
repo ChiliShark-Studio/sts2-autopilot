@@ -8,7 +8,8 @@ import unittest
 from brain.actions import ClaimReward, Proceed, SelectCardReward, SkipCardReward
 from brain.contracts import DecisionKind, DecisionRequest
 from brain.model import GameState
-from brain.tools.build_flow import BuildFlowTool, card_score
+from brain.build.flow import BuildFlowTool
+from brain.build.scoring import card_score
 
 REWARD_STATE = {
     "state_type": "card_reward",
@@ -75,7 +76,7 @@ class BuildFlowTests(unittest.TestCase):
 
     def test_discard_score_protects_rares(self):
         from brain.model import Card
-        from brain.tools.build_flow import discard_score
+        from brain.build.scoring import discard_score
 
         rare_engine = Card(name="腐蚀波", cost=1, rarity="Rare", type="Skill")
         basic_defend = Card(name="防御", cost=1, block=5, rarity="Basic", type="Skill")
@@ -87,7 +88,7 @@ class EventTests(unittest.TestCase):
     """真理石板会逐步扣除最大生命, 策略不得一直选择继续."""
 
     def _score(self, option, hp=91, max_hp=91):
-        from brain.tools.build_flow import _event_score
+        from brain.build.flow import _event_score
 
         return _event_score(option, hp, max_hp)
 

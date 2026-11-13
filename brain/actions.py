@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from .model import Card, GameState
+from .combat.effects import resolve_cost
 
 
 class ActionError(ValueError):
@@ -55,7 +56,7 @@ class PlayCard(Action):
             raise ActionError(f"hand index {self.card.index} out of range")
         if not self.card.can_play:
             raise ActionError(f"{self.card.name} is not playable right now")
-        if self.card.cost > state.player.energy:
+        if resolve_cost(self.card.cost, self.card.cost_x, state.player.energy) > state.player.energy:
             raise ActionError(f"{self.card.name} costs {self.card.cost} > energy {state.player.energy}")
 
     def to_payload(self) -> dict[str, Any]:
@@ -65,7 +66,8 @@ class PlayCard(Action):
         return payload
 
     def describe(self) -> str:
-        return f"打出 {self.card.name}(费{self.card.cost})" + (f" -> {self.target}" if self.target else "")
+        cost = "X" if self.card.cost_x else str(self.card.cost)
+        return f"打出 {self.card.name}(费{cost})" + (f" -> {self.target}" if self.target else "")
 
 
 @dataclass(frozen=True)

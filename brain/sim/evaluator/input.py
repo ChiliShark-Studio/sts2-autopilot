@@ -7,9 +7,9 @@ from typing import Any
 
 from ...model import Card
 from ...cards import find_card
+from ...cards.catalog import simulation_catalog
 from ...upgrades import upgrade
 from ..engine import DeckCard
-from ..ironclad import ALL_CARDS
 
 
 def integer(value: Any, name: str, minimum: int = 0) -> int:
@@ -70,7 +70,7 @@ class EvaluationInput:
 
 # 这些目录条目含当前引擎尚未忠实建模的额外机制，不能只取其中的伤害数值。
 _UNSUPPORTED_CATALOG = {
-    "旋风斩", "连续反弹", "飞剑回旋镖", "闪电霹雳", "突破", "头槌",
+    "连续反弹", "飞剑回旋镖", "闪电霹雳", "突破", "头槌",
     "燃烧契约", "坚毅", "劫掠", "暴走", "拆卸", "契约终章",
 }
 _POWER_FIELDS = {
@@ -114,6 +114,7 @@ def _upgrades(deck: list[DeckCard], missing: list[str]) -> dict[str, DeckCard]:
         if card.name.endswith("+"):
             continue
         native = Card(id=card.id, name=card.name, type=card_type(card),
+                      cost_x=card.cost_x, hits_x=card.hits_x,
                       **{key: getattr(card, key) for key in keys})
         upgraded = upgrade(native)
         if upgraded is native:
@@ -151,9 +152,9 @@ def parse(raw: dict) -> EvaluationInput:
     numeric = {f.name for f in fields(EvaluationCard)} - {
         "name", "id", "description", "target", "exhaust", "playable", "keep_block",
         "double_first_block", "corruption", "scales_with_block", "cruelty", "no_energy_gain",
-        "hellraiser", "strike", "all_enemies", "definition"}
+        "hellraiser", "strike", "all_enemies", "definition", "cost_x", "hits_x"}
     booleans = {"exhaust", "playable", "keep_block", "double_first_block", "corruption", "scales_with_block",
-                "no_energy_gain", "hellraiser", "strike", "all_enemies"}
+                "no_energy_gain", "hellraiser", "strike", "all_enemies", "cost_x", "hits_x"}
     allowed_card = {f.name for f in fields(EvaluationCard)} - {"definition"} | {"count", "type"}
     for index, entry in enumerate(raw["deck"]):
         if isinstance(entry, str):
@@ -168,10 +169,12 @@ def parse(raw: dict) -> EvaluationInput:
         spec = {k: v for k, v in entry.items() if k in allowed_card - {"count", "type"}}
         definition = None
         if set(spec) == {"name"}:
-            catalog = {**ALL_CARDS, **_LOCAL_CARDS}
-            definition = find_card(name)
-            if definition is not None:
-                name = spec["name"] = definition.name
+            catalog = {**simulation_catalog(), **_LOCAL_CARDS}
+            catalog_card = find_card(name)
+            if catalog_card is not None:
+                name = spec["name"] = catalog_card.name
+                # 旧模板只迁移数值归属；完整共享效果尚未迁移时保留原有结算路径。
+                definition = catalog_card if catalog_card.effects else None
             if name not in catalog:
                 missing.append(f"未收录卡牌：{name}，请提供显式数值与效果")
             elif name.rstrip("+") in _UNSUPPORTED_CATALOG:
@@ -181,11 +184,17 @@ def parse(raw: dict) -> EvaluationInput:
                 assumptions.append("按牌名使用仓库现有铁甲战士目录，数值仍需与本机版本核对")
         elif entry.get("description"):
             missing.append(f"{name} 的描述文本尚未核实是否被显式效果完整覆盖")
+        if isinstance(spec.get("cost"), str) and spec["cost"].strip().upper() == "X":
+            if "cost_x" in spec and spec["cost_x"] is not True:
+                raise ValueError(f"{name} 的 X 费用要求 cost_x 为 True")
+            spec.update(cost=0, cost_x=True)
         for key in numeric & spec.keys():
             integer(spec[key], f"{name}.{key}", 1 if key == "hits" else 0)
         for key in booleans & spec.keys():
             if type(spec[key]) is not bool:
                 raise ValueError(f"{name}.{key} 必须是布尔值")
+        if spec.get("cost_x") and not spec.get("hits_x"):
+            missing.append(f"{name} 的 X 费效果尚未支持；当前只接入按 X 次重复攻击")
         if "cruelty" in spec and (type(spec["cruelty"]) not in (int, float) or not 0 <= spec["cruelty"] <= 1):
             raise ValueError(f"{name}.cruelty 必须在 0 到 1 之间")
         if not isinstance(entry.get("type", ""), str):
@@ -193,7 +202,7 @@ def parse(raw: dict) -> EvaluationInput:
         kind = entry.get("type", "").lower()
         if kind not in {"", "attack", "skill", "power", "status", "curse"}:
             raise ValueError(f"{name}.type 无效")
-        if spec.get("target", "AnyEnemy") not in {"AnyEnemy", "Self", "None"}:
+        if spec.get("target", "AnyEnemy") not in {"AnyEnemy", "AllEnemies", "Self", "None"}:
             missing.append(f"{name} 的目标机制未支持：{spec['target']}")
         if kind in {"status", "curse"}:
             spec["playable"] = False

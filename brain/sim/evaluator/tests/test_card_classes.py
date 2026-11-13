@@ -13,7 +13,7 @@ from brain.sim.engine import Fight, Intent, Monster
 from brain.sim.evaluator import evaluate
 from brain.sim.evaluator.core import _ObservedFight
 from brain.sim.evaluator.input import parse
-from brain.sim.ironclad import card
+from brain.sim.deck import card
 from brain.combat.search import _Sim
 
 

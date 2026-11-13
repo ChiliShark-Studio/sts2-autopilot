@@ -12,9 +12,10 @@ from brain.contracts import DecisionKind, DecisionRequest, Source
 from brain.factory import build_agent
 from brain.llm import make_mock_client
 from brain.model import GameState
-from brain.tools.build_flow import BuildFlowTool
-from brain.tools.map_router import MapRouterTool
-from brain.tools.strategy import StrategyContext, character_prompt
+from brain.build.flow import BuildFlowTool
+from brain.map.router import MapRouterTool
+from brain.strategy.context import StrategyContext
+from brain.strategy.prompts import character_prompt
 from brain.tests.test_build_flow import REWARD_STATE, request
 from brain.tests.test_map_router import MAP
 

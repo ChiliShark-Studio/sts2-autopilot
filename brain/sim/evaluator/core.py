@@ -11,7 +11,10 @@ from ...contracts import DecisionKind, DecisionRequest
 from ...cards import EffectKind, Event, TriggeredEffect, card_effects
 from ...model import Card, GameState
 from ...combat.search import ENERGY_VALUE, HP_WEIGHT_FULL, HP_WEIGHT_LOW, decide_state
-from ...tools.select_tool import SelectTool
+from ...agents.select import SelectAgent
+from ...build.select import BuildSelect
+from ...combat.select import CombatSelect
+from ...combat.effects import resolve_cost
 from ...upgrades import choose_upgrade
 from ..engine import Fight, Intent, Monster
 from .input import EvaluationInput, card_type, parse
@@ -95,7 +98,7 @@ class _ObservedFight(Fight):
             raw["state_type"] = "hand_select"
             raw["hand_select"] = {"prompt": "选择一张手牌放到你的抽牌堆顶。",
                                   "cards": raw["player"]["hand"]}
-            decision = SelectTool().decide(DecisionRequest(
+            decision = SelectAgent(BuildSelect(), CombatSelect()).decide(DecisionRequest(
                 kind=DecisionKind.SELECT, state=GameState.parse(raw), scene="hand_select"))
             if decision.action is None or decision.action.kind != "combat_select_card":
                 raise ValueError("放回抽牌堆顶时未得到合法选牌动作")
@@ -141,7 +144,8 @@ class _ObservedFight(Fight):
             return False
         card = self.hand[hand_index]
         kind = self.spec.types[card.id]
-        cost = 0 if automatic or (self.corruption and kind == "skill") else card.cost
+        free = automatic or (self.corruption and kind == "skill")
+        cost = 0 if free else resolve_cost(card.cost, card.cost_x, self.energy)
         if (not card.playable or cost > self.energy or self.over
                 or (self.ringing_active and self.turn_cards_played >= 1)):
             return False
@@ -162,7 +166,9 @@ class _ObservedFight(Fight):
         self._topdeck_pending = getattr(card, "topdeck", 0)
         original_draw = card.draw
         original_cost, original_damage, original_energy = card.cost, card.damage, card.energy
+        original_cost_x = card.cost_x
         card.cost = cost
+        card.cost_x = original_cost_x and not free
         card.damage += getattr(card, "per_strike", 0) * sum(c.strike for c in self.spec.deck)
         gained = card.energy + getattr(card, "energy_per_attack", 0) * sum(
             self.spec.types.get(c.id) == "attack" for c in self.hand if c is not card)
@@ -175,6 +181,7 @@ class _ObservedFight(Fight):
         finally:
             card.draw = original_draw
             card.cost, card.damage, card.energy = original_cost, original_damage, original_energy
+            card.cost_x = original_cost_x
             self._vulnerable_draw = self._topdeck_pending = 0
             self._vulnerable_target = None
         self.corruption = self.corruption or corruption
@@ -337,6 +344,8 @@ class _ObservedFight(Fight):
             kind = self.spec.types.get(card.id, card_type(card) if card.playable else "status")
             cost = 0 if self.corruption and kind == "skill" else card.cost
             desc = [card.description] if card.description else []
+            if card.hits_x:
+                desc.append(f"造成{card.damage}点伤害X次。")
             if card.scales_with_block:
                 desc.append("造成你当前格挡值的伤害。")
             if card.per_vulnerable:
@@ -368,7 +377,7 @@ class _ObservedFight(Fight):
             if card.name.rstrip("+") == "武装":
                 desc.append("升级你手牌中的所有牌。" if card.name.endswith("+") else "升级你手牌中的一张牌。")
             # 能量由搜索逐步检查，避免初始买不起的牌在产能后仍被缓存为不可打出。
-            entry.update(type=kind, cost=str(cost), can_play=card.playable and not (
+            entry.update(type=kind, cost="X" if card.cost_x and not (self.corruption and kind == "skill") else str(cost), can_play=card.playable and not (
                          self.ringing_active and self.turn_cards_played >= 1),
                          strength=card.strength + getattr(card, "temporary_strength", 0),
                          dexterity=getattr(card, "dexterity", 0),
@@ -490,7 +499,8 @@ def evaluate(raw: dict) -> dict:
         "defense": {key: [r[key] for r in by_turn] for key in (
             "block_generated", "effective_block", "weak_mitigation", "enemy_hp_loss", "self_hp_cost",
             "status_hp_loss", "status_block")},
-        "cost": {"printed_average": round(statistics.mean(c.cost for c in spec.deck), 3),
+        "cost": {"printed_average": round(statistics.mean(c.cost for c in spec.deck if not c.cost_x), 3)
+                 if any(not c.cost_x for c in spec.deck) else None,
                  **{key: [r[key] for r in by_turn] for key in (
                      "energy_start", "energy_generated", "energy_spent", "energy_remaining", "unaffordable_cards")}},
         "startup": {"first_cycle": _timing([f.first_cycle for f in fights]),
@@ -505,6 +515,9 @@ def evaluate(raw: dict) -> dict:
                     "groups": {name: _timing([f.group_turns.get(name) for f in fights]) for name in spec.groups},
                     "group_definition": "已激活的能力牌与本回合已打出的牌覆盖指定组件；不证明无限或稳定通关"},
     }
+    if any(c.cost_x for c in spec.deck):
+        report["dimensions"]["cost"].update(
+            x_cost_cards=sum(c.cost_x for c in spec.deck), printed_average_scope="仅固定费牌；X 费不按零费计入平均值")
     return report
 
 

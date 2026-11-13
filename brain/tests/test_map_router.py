@@ -6,8 +6,8 @@ import unittest
 
 from brain.contracts import DecisionKind, DecisionRequest, Source
 from brain.model import GameState
-from brain.tools.map_router import MapRouterTool, fallback, validate_route
-from brain.tools.strategy import StrategyContext
+from brain.map.router import MapRouterTool, fallback, validate_route
+from brain.strategy.context import StrategyContext
 
 # 起点 (1,1) -> (0,2) 普通战斗 或 (2,2) 商店;
 # (2,2) 是分叉点, 可去 (2,3) 休息点或 (0,3) 精英, 两条都通向 (1,4) Boss.

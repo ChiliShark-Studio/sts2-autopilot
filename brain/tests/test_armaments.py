@@ -7,7 +7,9 @@ from brain.effects import parse_card
 from brain.model import Card, GameState
 from brain.tests.test_potions import state
 from brain.combat.search import _Sim, _plan, decide_state
-from brain.tools.select_tool import SelectTool
+from brain.agents.select import SelectAgent
+from brain.build.select import BuildSelect
+from brain.combat.select import CombatSelect
 from brain.upgrades import choose_upgrade, upgrade
 
 
@@ -114,7 +116,7 @@ class ArmamentsSearchTests(unittest.TestCase):
         self.assertTrue(next(c for c in node.hand if c.name == "防御+").upgraded)
         picker = {"state_type": "hand_select", "player": raw["player"], "battle": raw["battle"],
                   "hand_select": {"prompt": "选择1张牌来升级。", "cards": [strike(), defend()]}}
-        chosen = SelectTool().decide(DecisionRequest(kind=DecisionKind.SELECT, state=GameState.parse(picker)))
+        chosen = SelectAgent(BuildSelect(), CombatSelect()).decide(DecisionRequest(kind=DecisionKind.SELECT, state=GameState.parse(picker)))
         self.assertEqual(chosen.action.index, 2)
 
     def test_survival_cannot_be_outweighed_by_large_future_upgrade_value(self):

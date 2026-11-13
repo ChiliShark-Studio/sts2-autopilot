@@ -18,7 +18,8 @@ from ..contracts import Decision, Source
 from ..effects import humanize
 from ..llm import LLMClient
 from ..model import GameState
-from ..tools.strategy import StrategyContext, situation
+from ..strategy.context import StrategyContext
+from ..strategy.situation import situation
 
 # 模型选择"不使用"时返回的编号.
 DECLINE = -1

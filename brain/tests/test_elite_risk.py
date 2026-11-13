@@ -11,8 +11,8 @@ from brain.model import GameState
 from brain.sim import scenarios
 from brain.sim.engine import DeckCard, deck_from_cards
 from brain.sim.risk import SAFETY_MARGIN, assess
-from brain.tools.map_router import MapRouterTool, _describe_risk
-from brain.tools.strategy import StrategyContext
+from brain.map.router import MapRouterTool, _describe_risk
+from brain.strategy.context import StrategyContext
 
 # 起点 (1,1) 只有一条路: 下一跳就是精英.
 ELITE_MAP = {

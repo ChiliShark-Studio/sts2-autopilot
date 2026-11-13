@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from brain.sim.engine import DeckCard, Fight, Intent, Monster
-from brain.sim.ironclad import card
+from brain.sim.deck import card
 
 
 def dummy(hp: int = 200) -> Monster:

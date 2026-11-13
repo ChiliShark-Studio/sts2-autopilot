@@ -11,7 +11,7 @@ import unittest
 
 from brain.sim import scenarios
 from brain.sim.arena import run_fight
-from brain.sim.ironclad import deck
+from brain.sim.deck import deck
 
 # 那局实际用的 17 张散装牌组 (没有引擎、没有主线).
 SCATTERED = {

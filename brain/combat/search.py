@@ -32,7 +32,7 @@ from typing import Any, Optional
 from ..actions import EndTurn, PlayCard, UsePotion
 from ..contracts import WAIT, Decision, DecisionKind, DecisionRequest, Source
 from ..cards import EffectKind, Event, capability, card_effects
-from .effects import ActiveEffect, apply_effects, emit, power_amount, read_powers
+from .effects import ActiveEffect, apply_effects, emit, power_amount, read_powers, resolve_cost, resolve_hits
 from ..effects import parse_potion
 from ..model import Battle, Card, Player, Potion
 from ..upgrades import choose_upgrade, upgrade, upgrade_gain
@@ -301,7 +301,7 @@ class _Sim:
             return []
         out: list[tuple[int, Optional[int]]] = []
         for pos, card in enumerate(self.hand):
-            if not card.can_play or card.cost > self.energy:
+            if not card.can_play or resolve_cost(card.cost, card.cost_x, self.energy) > self.energy:
                 continue
             if card.needs_target:
                 for i, enemy in enumerate(self.enemies):
@@ -313,20 +313,24 @@ class _Sim:
 
     def play(self, pos: int, target: Optional[int]) -> bool:
         card = self.hand[pos]
-        if card.cost > self.energy:
+        available = self.energy
+        cost = resolve_cost(card.cost, card.cost_x, available)
+        if cost > self.energy:
             return False
         self.cards_played += 1
-        self.energy -= card.cost
+        self.energy -= cost
         self.hand.pop(pos)
 
         targets = [self.enemies[target]] if target is not None and target < len(self.enemies) else []
+        if card.target_type.lower() == "allenemies":
+            targets = [enemy for enemy in self.enemies if enemy.alive]
         multiplier = 2 if self.duplicate_next else 1
         self.duplicate_next = 0
         # 拆卸: 目标有易伤时攻击两次.
         hits = card.hits
         if card.hits_if_vulnerable and any(e.vulnerable for e in targets):
             hits = card.hits_if_vulnerable
-        for _ in range(max(1, hits) * multiplier):
+        for _ in range(resolve_hits(hits, card.hits_x, available) * multiplier):
             for enemy in targets:
                 if not enemy.alive:
                     continue
@@ -497,9 +501,10 @@ class _Sim:
         total = 0
         energy = self.energy
         for card in self.hand:
-            if card.cost <= energy and card.can_play and card.damage > 0:
-                total += (card.damage + self.strength) * card.hits
-                energy -= card.cost
+            cost = resolve_cost(card.cost, card.cost_x, energy)
+            if cost <= energy and card.can_play and card.damage > 0:
+                total += (card.damage + self.strength) * resolve_hits(card.hits, card.hits_x, energy)
+                energy -= cost
         return total
 
     def apply_potion(self, eff: dict[str, int], target: Optional[int] = None) -> None:
