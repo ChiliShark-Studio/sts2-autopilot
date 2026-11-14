@@ -11,31 +11,145 @@
     "energy": 3,
     "block": 0,
     "deck": [
-      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy", "count": 2},
-      {"name": "防御", "cost": 1, "block": 5, "target_type": "Self", "count": 4},
-      {"name": "痛击+", "cost": 2, "damage": 10, "vulnerable": 3, "target_type": "AnyEnemy"},
-      {"name": "拆卸", "cost": 1, "damage": 8, "target_type": "AnyEnemy"},
-      {"name": "御血术", "cost": 1, "damage": 15, "target_type": "AnyEnemy"},
-      {"name": "飞剑回旋镖+", "cost": 1, "damage": 3, "hits": 4, "target_type": "AllEnemies"},
-      {"name": "剑柄打击", "cost": 1, "damage": 9, "draw": 1, "target_type": "AnyEnemy"},
-      {"name": "燃烧契约", "cost": 1, "draw": 0, "target_type": "Self"},
-      {"name": "耸肩无视", "cost": 1, "block": 8, "draw": 1, "target_type": "Self"},
-      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
-      {"name": "巨像", "cost": 1, "block": 5, "target_type": "Self"},
-      {"name": "狂宴", "cost": 1, "damage": 10, "target_type": "AnyEnemy"}
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "target_type": "AnyEnemy",
+        "count": 2,
+        "hits": 1
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "block": 5,
+        "target_type": "Self",
+        "count": 4,
+        "hits": 1
+      },
+      {
+        "name": "痛击+",
+        "cost": 2,
+        "damage": 10,
+        "vulnerable": 3,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "拆卸",
+        "cost": 1,
+        "damage": 8,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "御血术",
+        "cost": 1,
+        "damage": 15,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "飞剑回旋镖+",
+        "cost": 1,
+        "damage": 3,
+        "hits": 4,
+        "target_type": "AllEnemies"
+      },
+      {
+        "name": "剑柄打击",
+        "cost": 1,
+        "damage": 9,
+        "draw": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "燃烧契约",
+        "cost": 1,
+        "draw": 0,
+        "target_type": "Self",
+        "hits": 1
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "block": 8,
+        "draw": 1,
+        "target_type": "Self",
+        "hits": 1
+      },
+      {
+        "name": "藏宝图",
+        "cost": 0,
+        "target_type": "Self",
+        "hits": 1
+      },
+      {
+        "name": "巨像",
+        "cost": 1,
+        "block": 5,
+        "target_type": "Self",
+        "hits": 1
+      },
+      {
+        "name": "狂宴",
+        "cost": 1,
+        "damage": 10,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      }
     ],
     "hand": [
-      {"name": "藏宝图", "cost": 0, "target_type": "Self"},
-      {"name": "飞剑回旋镖+", "cost": 1, "damage": 3, "hits": 4, "target_type": "AllEnemies"},
-      {"name": "耸肩无视", "cost": 1, "block": 8, "draw": 1, "target_type": "Self"},
-      {"name": "御血术", "cost": 1, "damage": 15, "target_type": "AnyEnemy"},
-      {"name": "打击", "cost": 1, "damage": 6, "target_type": "AnyEnemy"}
+      {
+        "name": "藏宝图",
+        "cost": 0,
+        "target_type": "Self"
+      },
+      {
+        "name": "飞剑回旋镖+",
+        "cost": 1,
+        "damage": 3,
+        "hits": 4,
+        "target_type": "AllEnemies"
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "block": 8,
+        "draw": 1,
+        "target_type": "Self"
+      },
+      {
+        "name": "御血术",
+        "cost": 1,
+        "damage": 15,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "target_type": "AnyEnemy"
+      }
     ]
   },
   "relics": [
-    {"name": "燃烧之血", "description": "战斗结束时回复 6 点生命。", "effects": {}},
-    {"name": "松动羊毛剪", "description": "拾起时, 从牌组中移除 2 张牌。", "effects": {}},
-    {"name": "地精之角", "description": "击杀敌人时获得能量并抽牌。", "effects": {}}
+    {
+      "name": "燃烧之血",
+      "description": "战斗结束时回复 6 点生命。",
+      "effects": {}
+    },
+    {
+      "name": "松动羊毛剪",
+      "description": "拾起时, 从牌组中移除 2 张牌。",
+      "effects": {}
+    },
+    {
+      "name": "地精之角",
+      "description": "击杀敌人时获得能量并抽牌。",
+      "effects": {}
+    }
   ],
   "enemies": [
     {
@@ -43,14 +157,32 @@
       "name": "花园幽灵鳗",
       "hp": 31,
       "max_hp": 31,
-      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "status": [
+        {
+          "id": "SKITTISH_POWER",
+          "amount": 6
+        }
+      ],
       "repeat": true,
       "repeat_from": 0,
       "intents": [
-        {"type": "attack", "damage": 1, "hits": 3},
-        {"type": "buff", "strength": 3},
-        {"type": "attack", "damage": 5},
-        {"type": "attack", "damage": 7}
+        {
+          "type": "attack",
+          "damage": 1,
+          "hits": 3
+        },
+        {
+          "type": "buff",
+          "strength": 3
+        },
+        {
+          "type": "attack",
+          "damage": 5
+        },
+        {
+          "type": "attack",
+          "damage": 7
+        }
       ]
     },
     {
@@ -58,14 +190,32 @@
       "name": "花园幽灵鳗",
       "hp": 28,
       "max_hp": 28,
-      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "status": [
+        {
+          "id": "SKITTISH_POWER",
+          "amount": 6
+        }
+      ],
       "repeat": true,
       "repeat_from": 0,
       "intents": [
-        {"type": "attack", "damage": 5},
-        {"type": "attack", "damage": 7},
-        {"type": "attack", "damage": 1, "hits": 3},
-        {"type": "buff", "strength": 3}
+        {
+          "type": "attack",
+          "damage": 5
+        },
+        {
+          "type": "attack",
+          "damage": 7
+        },
+        {
+          "type": "attack",
+          "damage": 1,
+          "hits": 3
+        },
+        {
+          "type": "buff",
+          "strength": 3
+        }
       ]
     },
     {
@@ -73,14 +223,32 @@
       "name": "花园幽灵鳗",
       "hp": 29,
       "max_hp": 29,
-      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "status": [
+        {
+          "id": "SKITTISH_POWER",
+          "amount": 6
+        }
+      ],
       "repeat": true,
       "repeat_from": 0,
       "intents": [
-        {"type": "attack", "damage": 7},
-        {"type": "attack", "damage": 1, "hits": 3},
-        {"type": "buff", "strength": 3},
-        {"type": "attack", "damage": 5}
+        {
+          "type": "attack",
+          "damage": 7
+        },
+        {
+          "type": "attack",
+          "damage": 1,
+          "hits": 3
+        },
+        {
+          "type": "buff",
+          "strength": 3
+        },
+        {
+          "type": "attack",
+          "damage": 5
+        }
       ]
     },
     {
@@ -88,14 +256,32 @@
       "name": "花园幽灵鳗",
       "hp": 26,
       "max_hp": 26,
-      "status": [{"id": "SKITTISH_POWER", "amount": 6}],
+      "status": [
+        {
+          "id": "SKITTISH_POWER",
+          "amount": 6
+        }
+      ],
       "repeat": true,
       "repeat_from": 0,
       "intents": [
-        {"type": "buff", "strength": 3},
-        {"type": "attack", "damage": 5},
-        {"type": "attack", "damage": 7},
-        {"type": "attack", "damage": 1, "hits": 3}
+        {
+          "type": "buff",
+          "strength": 3
+        },
+        {
+          "type": "attack",
+          "damage": 5
+        },
+        {
+          "type": "attack",
+          "damage": 7
+        },
+        {
+          "type": "attack",
+          "damage": 1,
+          "hits": 3
+        }
       ]
     }
   ]

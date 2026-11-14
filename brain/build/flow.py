@@ -96,6 +96,16 @@ def _event_score(option: dict, hp: int, max_hp: int) -> Optional[float]:
     )
 
 
+# 事件选项里"失去 N 点生命值"的代价: 血量低时要能直接过滤掉付血选项.
+_HP_COST = re.compile(r"失去\s*(\d+)\s*点生命")
+
+
+def _hp_cost(option: dict) -> int:
+    text = str(option.get("description") or "")
+    match = _HP_COST.search(text)
+    return int(match.group(1)) if match else 0
+
+
 class BuildFlowTool:
     name = "build_flow"
 
@@ -143,6 +153,20 @@ class BuildFlowTool:
         if decision is None:
             return no_decision(self.name, f"模型连续 {LLM_ATTEMPTS} 次未给出有效选择")
         return decision
+
+    def _drop_blood_costs(self, state, options: list[dict]) -> list[dict]:
+        """血量低于六成时, 去掉"失去生命值"的选项.
+
+        规则来自复盘: 用生命换上限只在血量健康时成立; 血量低时继续付血,
+        换来的是"下一场战斗可能直接死"。全部选项都要付血时保留原样,
+        否则会无选项可点。
+        """
+        player = state.player
+        ratio = player.hp / player.max_hp if player.max_hp else 1.0
+        if ratio >= 0.6:
+            return options
+        safe = [o for o in options if _hp_cost(o) == 0]
+        return safe or options
 
     def _card_reward(self, request: DecisionRequest) -> Decision:
         # 陷阱牌 (铁斩波这类) 直接从候选里剔除: 模型看不到, 也就选不出来.
@@ -212,6 +236,11 @@ class BuildFlowTool:
         if not options:
             # 事件换页时会重建按钮, 暂时没有选项属于过渡状态.
             return WAIT
+
+        # 血量低于六成时不再用生命换事件收益: 这条规则不能只写在提示词里——
+        # 真机上模型会用"战后能回血"之类的理由说服自己付血 (第 12 层巨大花卉
+        # 在 35% 血量下连付三次, 41 -> 23)。能过滤就直接过滤掉付血选项。
+        options = self._drop_blood_costs(request.state, options)
 
         decision = self._choose(
             request,

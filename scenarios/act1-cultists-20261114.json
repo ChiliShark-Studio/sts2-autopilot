@@ -1,0 +1,217 @@
+{
+  "name": "第一幕·两名邪教徒（真机录像 2026-11-14）",
+  "description": "2026-11-14 第一幕第 12 层的邪教徒战: 铁甲战士 74/86 血、能量 3。两名邪教徒第 1 回合念咒获得仪式 (钙化 +2 / 潮湿 +5 力量每回合), 之后攻击伤害逐回合变高。用于验证仪式建模与'该抢输出还是继续防'。",
+  "seed": 0,
+  "max_turns": 30,
+  "screen": "monster",
+  "player": {
+    "hp": 74,
+    "max_hp": 86,
+    "max_energy": 3,
+    "energy": 3,
+    "block": 0,
+    "deck": [
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "痛击",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "铁斩波",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 5,
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "双重打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 7,
+        "hits": 1
+      },
+      {
+        "name": "岩石铠甲",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "燃烧",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "旋风斩",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "cost_x": true,
+        "damage": 8,
+        "hits": 1
+      },
+      {
+        "name": "战栗",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "飞剑回旋镖",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 3,
+        "hits": 3
+      }
+    ],
+    "hand": [
+      {
+        "name": "燃烧",
+        "cost": 1,
+        "hits": 1,
+        "target_type": "Self"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "双重打击",
+        "cost": 1,
+        "damage": 5,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      }
+    ]
+  },
+  "relics": [
+    {
+      "name": "燃烧之血",
+      "description": "在战斗结束时，回复6点生命。",
+      "effects": {}
+    }
+  ],
+  "enemies": [
+    {
+      "entity_id": "CALCIFIED_CULTIST_0",
+      "name": "钙化邪教徒",
+      "hp": 41,
+      "max_hp": 41,
+      "status": [
+        {
+          "id": "RITUAL_POWER",
+          "amount": 2
+        }
+      ],
+      "intents": [
+        {
+          "type": "attack",
+          "damage": 9
+        }
+      ],
+      "repeat": true
+    },
+    {
+      "entity_id": "DAMP_CULTIST_0",
+      "name": "潮湿邪教徒",
+      "hp": 52,
+      "max_hp": 52,
+      "status": [
+        {
+          "id": "RITUAL_POWER",
+          "amount": 5
+        }
+      ],
+      "intents": [
+        {
+          "type": "attack",
+          "damage": 1
+        }
+      ],
+      "repeat": true
+    }
+  ]
+}

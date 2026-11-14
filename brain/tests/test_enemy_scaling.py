@@ -58,6 +58,41 @@ class BuffGrowthTests(unittest.TestCase):
                               ShimmeringJaxfruitRule)
 
 
+class RitualTests(unittest.TestCase):
+    """仪式 (RITUAL_POWER): 邪教徒回合结束固定加力量, 攻击每回合都会涨."""
+
+    def _state(self, ritual: int):
+        return {
+            "state_type": "monster",
+            "battle": {
+                "round": 1, "turn": "player", "ready_for_action": True,
+                "enemies": [{"entity_id": "CULTIST_0", "name": "潮湿邪教徒", "hp": 37,
+                             "max_hp": 37,
+                             "status": [{"id": "RITUAL_POWER", "name": "仪式",
+                                         "amount": ritual}],
+                             "intents": [{"type": "Attack", "damage": 6, "hits": 1}]}],
+            },
+            "player": {"hp": 74, "max_hp": 87, "energy": 3, "status": [],
+                       "hand": [dict(DEFEND, index=0), dict(STRIKE, index=1)]},
+        }
+
+    def test_ritual_marks_the_enemy_as_scaling(self):
+        sim = _Sim.build(*_sim_parts(self._state(5)))
+        self.assertEqual(sim.enemies[0].ritual, 5)
+        self.assertTrue(sim.enemies[0].scaling)
+        self.assertTrue(sim.race_needed())
+
+    def test_no_ritual_means_no_scaling(self):
+        sim = _Sim.build(*_sim_parts(self._state(0)))
+        self.assertFalse(sim.enemies[0].scaling)
+        self.assertFalse(sim.race_needed())
+
+
+def _sim_parts(raw):
+    parsed = GameState.parse(raw)
+    return parsed.player, parsed.battle
+
+
 class ScalingTests(unittest.TestCase):
     def test_jaxfruit_is_not_treated_as_scaling(self):
         parsed = GameState.parse(state(hand=[dict(DEFEND, index=0)], strength=18))

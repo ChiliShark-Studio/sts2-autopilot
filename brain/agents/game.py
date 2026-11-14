@@ -204,7 +204,13 @@ class GameAgent:
                         # 这类"按钮还没出来"的错误同样只需重新读取状态.
                         retryable = ("not open", "not available", "No card", "Not in combat",
                                      "no combat", "not in progress", "No proceed button",
-                                     "proceed button", "not enabled")
+                                     "proceed button", "not enabled",
+                                     # 手牌/能量在读取状态与发送动作之间已经变了:
+                                     # 例如狂乱逃离每打出一次就涨价, 或状态帧里手牌顺序
+                                     # 是旧的, 于是我们按旧的 index 发牌 -> 游戏说这张打不起.
+                                     # 重新读一帧再决定即可, 不该中断整局.
+                                     "EnergyCostTooHigh", "cannot be played",
+                                     "Not enough energy", "Invalid card")
                         if any(token in str(exc) for token in retryable):
                             time.sleep(0.4)
                             continue

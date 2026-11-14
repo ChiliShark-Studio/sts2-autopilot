@@ -1,0 +1,77 @@
+[
+  {
+    "name": "墨影幻灵",
+    "english": "Vantom",
+    "act": 1,
+    "death_rate": 16.5,
+    "avg_turns": 9,
+    "check": "成长",
+    "note": "9 回合的长战斗，考的是牌组后劲；爆发不够会在中段掉血。"
+  },
+  {
+    "name": "乐加维林族母",
+    "english": "Lagavulin Matriarch",
+    "act": 1,
+    "death_rate": 16.1,
+    "check": "伤害/格挡",
+    "note": "静默猎手死亡率 23%，其他角色 12~17%，是角色差异最大的一场。"
+  },
+  {
+    "name": "灵魂异鱼",
+    "english": "Soul Fysh",
+    "act": 1,
+    "death_rate": 12.6,
+    "check": "机制(呼唤)",
+    "note": "第一幕最好打的 Boss；但手里留「呼唤」每张掉 6 血，必须先清。"
+  },
+  {
+    "name": "知识恶魔",
+    "english": "Knowledge Demon",
+    "act": 2,
+    "death_rate": 22.1,
+    "check": "成长/伤害",
+    "note": "第二幕最致命，故障机器人死亡率 26%。"
+  },
+  {
+    "name": "帝皇蟹",
+    "english": "Kaiser Crab",
+    "act": 2,
+    "death_rate": 19.9,
+    "check": "伤害/格挡",
+    "note": "铁甲战士最怕它。"
+  },
+  {
+    "name": "无厌沙虫",
+    "english": "The Insatiable",
+    "act": 2,
+    "death_rate": 16,
+    "check": "机制(沙坑)",
+    "note": "第二幕最仁慈；沙坑归零直接死亡，狂乱逃离比格挡重要。"
+  },
+  {
+    "name": "女王",
+    "english": "Queen",
+    "act": 3,
+    "death_rate": 18,
+    "check": "前置爆发/格挡",
+    "note": "惩罚前置爆发的牌组；铁甲战士与故障机器人死得最多；需要每回合 20+ 格挡。"
+  },
+  {
+    "name": "实验体",
+    "english": "Test Subject",
+    "act": 3,
+    "death_rate": 22,
+    "avg_turns": 9.3,
+    "check": "成长",
+    "note": "全游戏最长的 Boss 战；打到第 5 回合就停摆的牌组会慢慢输掉。"
+  },
+  {
+    "name": "Aeonglass",
+    "english": "Aeonglass",
+    "act": 3,
+    "death_rate": 25.4,
+    "avg_turns": 7,
+    "check": "伤害/格挡",
+    "note": "全游戏最致命，平均掉 74 血、7 回合；第二幕改版后替换了原门匠。"
+  }
+]

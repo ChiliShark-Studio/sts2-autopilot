@@ -1,0 +1,295 @@
+{
+  "name": "第三幕·女王第二阶段（真机录像 2026-11-14, 爪牙已死）",
+  "description": "从爪牙死亡、女王开始攻击的那一刻起: 女王按 激怒(+2 力量)/将头砍下(3x5)/处决(15) 循环, 玩家带 99 层易伤 (受到的攻击 x1.5)。用于回答\"清完爪牙后还剩多少胜算\"。未建模: 魂缚锁链 (每回合锁住抽牌堆顶三张中的两张)。",
+  "seed": 0,
+  "max_turns": 40,
+  "screen": "boss",
+  "player": {
+    "hp": 38,
+    "max_hp": 84,
+    "max_energy": 4,
+    "energy": 4,
+    "block": 0,
+    "deck": [
+      {
+        "name": "防御+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "痛击+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "旋风斩+",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "cost_x": true,
+        "damage": 8,
+        "hits": 1
+      },
+      {
+        "name": "武装",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "双重打击+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 7,
+        "hits": 1
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 8
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 8
+      },
+      {
+        "name": "劫掠",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "预备打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "焚烧",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 2,
+        "hits": 4
+      },
+      {
+        "name": "与我一战！+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "damage": 6,
+        "hits": 2
+      },
+      {
+        "name": "燃烧+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "突破+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 13,
+        "hits": 1
+      },
+      {
+        "name": "劫掠+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "战栗",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "亮剑",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "damage": 5,
+        "hits": 1
+      },
+      {
+        "name": "剑柄打击+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "剑柄打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "势不可当+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "武装",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "岩石铠甲+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "疑虑",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "主宰+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "劫掠",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "凶恶+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "飞剑回旋镖+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 3,
+        "hits": 3
+      },
+      {
+        "name": "闪电霹雳+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 7,
+        "hits": 1
+      }
+    ],
+    "hand": [
+      {
+        "name": "旋风斩+",
+        "cost": 0,
+        "damage": 8,
+        "hits": 1,
+        "target_type": "AllEnemies",
+        "cost_x": true
+      },
+      {
+        "name": "战栗",
+        "cost": 1,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "剑柄打击",
+        "cost": 1,
+        "damage": 9,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "hits": 1,
+        "block": 8,
+        "target_type": "Self"
+      },
+      {
+        "name": "劫掠",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "劫掠+",
+        "cost": 1,
+        "damage": 9,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      }
+    ]
+  },
+  "relics": [
+    {
+      "name": "燃烧之血",
+      "description": "战斗结束时回复 6 点生命。",
+      "effects": {}
+    }
+  ],
+  "enemies": [
+    {
+      "entity_id": "QUEEN_0",
+      "name": "女王",
+      "hp": 306,
+      "max_hp": 400,
+      "intents": [
+        {
+          "type": "buff",
+          "strength": 2
+        },
+        {
+          "type": "attack",
+          "damage": 3,
+          "hits": 5
+        },
+        {
+          "type": "attack",
+          "damage": 15
+        }
+      ],
+      "repeat": true
+    }
+  ]
+}

@@ -87,6 +87,37 @@ class Scenario:
                      screen=self.screen, **self.player)
 
 
+def _parse_intents(entries, where: str):
+    """把 JSON 意图数组解析成 Intent 列表."""
+    script = []
+    for turn, entry in enumerate(_items(entries, where)):
+        location = f"{where}[{turn}]"
+        intent = _object(entry, {"type", "damage", "hits", "block", "strength", "handler", "params"}, location)
+        kind = _text(intent.get("type"), f"{location}.type")
+        if kind not in {"attack", "defend", "buff", "wait", "custom"}:
+            raise ValueError(f"{location}.type 只支持 attack, defend, buff, wait, custom")
+        if (kind != "attack" and ("damage" in intent or "hits" in intent)
+                or kind != "defend" and "block" in intent):
+            raise ValueError(f"{location} 的伤害或格挡字段与意图类型不符")
+        handler = ""
+        params = {}
+        if kind == "custom":
+            handler = _text(intent.get("handler"), f"{location}.handler")
+            if handler not in CUSTOM_INTENTS:
+                raise ValueError(f"{location} 未注册特殊意图 {handler}")
+            params = intent.get("params")
+            CUSTOM_INTENTS[handler]["validate"](params)
+        elif "handler" in intent or "params" in intent:
+            raise ValueError(f"{location} 只有 custom 意图可以指定 handler 和 params")
+        script.append(Intent(kind,
+                             damage=_int(intent.get("damage", 0), f"{location}.damage"),
+                             hits=_int(intent.get("hits", 1), f"{location}.hits", 1),
+                             block=_int(intent.get("block", 0), f"{location}.block"),
+                             strength=_int(intent.get("strength", 0), f"{location}.strength", None),
+                             handler=handler, params=params))
+    return script
+
+
 def load(path: Path) -> Scenario:
     """读取场景, 未支持的字段或效果直接报错, 不默默降级."""
     raw = _object(json.loads(path.read_text(encoding="utf-8-sig")),
@@ -109,7 +140,11 @@ def load(path: Path) -> Scenario:
                "block": _int(player.get("block", 0), "player.block"),
                "draw_per_turn": _int(player.get("draw_per_turn", 5), "player.draw_per_turn", 1)}
     initial.update(_status(player.get("status", []),
-                           {"STRENGTH_POWER": "strength", "DEXTERITY_POWER": "dexterity"}, "player.status"))
+                           {"STRENGTH_POWER": "strength", "DEXTERITY_POWER": "dexterity",
+                            # 女王战会给玩家上这三层, 场景要能复刻.
+                            "FRAIL_POWER": "player_frail",
+                            "WEAK_POWER": "player_weak",
+                            "VULNERABLE_POWER": "player_vulnerable"}, "player.status"))
 
     numeric = {"cost", "damage", "hits", "block", "vulnerable", "weak", "draw", "energy",
                # 能力牌: 打出时立即获得的力量 (燃烧).
@@ -186,7 +221,8 @@ def load(path: Path) -> Scenario:
         for index, entry in enumerate(_items(phase.get("enemies"), f"phases[{phase_index}].enemies")):
             where = f"phases[{phase_index}].enemies[{index}]"
             enemy = _object(entry, {"entity_id", "name", "hp", "max_hp", "block", "status",
-                                    "repeat", "repeat_from", "intents"}, where)
+                                    "repeat", "repeat_from", "intents",
+                                    "is_minion", "minion_intents", "minion_repeat_from"}, where)
             next_id = len(entity_ids)
             while f"E{next_id}" in entity_ids:
                 next_id += 1
@@ -194,32 +230,7 @@ def load(path: Path) -> Scenario:
             if entity_id in entity_ids:
                 raise ValueError(f"敌人 entity_id 重复: {entity_id}")
             entity_ids.add(entity_id)
-            script = []
-            for turn, entry in enumerate(_items(enemy.get("intents"), f"{where}.intents")):
-                location = f"{where}.intents[{turn}]"
-                intent = _object(entry, {"type", "damage", "hits", "block", "strength", "handler", "params"}, location)
-                kind = _text(intent.get("type"), f"{location}.type")
-                if kind not in {"attack", "defend", "buff", "wait", "custom"}:
-                    raise ValueError(f"{location}.type 只支持 attack, defend, buff, wait, custom")
-                if (kind != "attack" and ("damage" in intent or "hits" in intent)
-                        or kind != "defend" and "block" in intent):
-                    raise ValueError(f"{location} 的伤害或格挡字段与意图类型不符")
-                handler = ""
-                params = {}
-                if kind == "custom":
-                    handler = _text(intent.get("handler"), f"{location}.handler")
-                    if handler not in CUSTOM_INTENTS:
-                        raise ValueError(f"{location} 未注册特殊意图 {handler}")
-                    params = intent.get("params")
-                    CUSTOM_INTENTS[handler]["validate"](params)
-                elif "handler" in intent or "params" in intent:
-                    raise ValueError(f"{location} 只有 custom 意图可以指定 handler 和 params")
-                script.append(Intent(kind,
-                                     damage=_int(intent.get("damage", 0), f"{location}.damage"),
-                                     hits=_int(intent.get("hits", 1), f"{location}.hits", 1),
-                                     block=_int(intent.get("block", 0), f"{location}.block"),
-                                     strength=_int(intent.get("strength", 0), f"{location}.strength", None),
-                                     handler=handler, params=params))
+            script = _parse_intents(enemy.get("intents"), f"{where}.intents")
             repeat = _bool(enemy.get("repeat", False), f"{where}.repeat")
             repeat_from = _int(enemy.get("repeat_from", 0), f"{where}.repeat_from")
             if repeat_from >= len(script) or (not repeat and repeat_from != 0):
@@ -233,11 +244,18 @@ def load(path: Path) -> Scenario:
                              # 硬化外壳: 每回合掉血上限; 初始额度由 Monster 同步.
                              "HARDENED_SHELL_POWER": "hp_loss_cap",
                              # 胆小: 每回合第一次被命中时获得的格挡.
-                             "SKITTISH_POWER": "skittish"}, f"{where}.status")
+                             "SKITTISH_POWER": "skittish",
+                             # 仪式: 邪教徒回合结束固定加力量.
+                             "RITUAL_POWER": "ritual"}, f"{where}.status")
+            minion_script = None
+            if "minion_intents" in enemy:
+                minion_script = _parse_intents(enemy["minion_intents"], f"{where}.minion_intents")
             monsters.append(Monster(name=_text(enemy.get("name"), f"{where}.name"), hp=enemy_hp,
                                     max_hp=enemy_max, block=_int(enemy.get("block", 0), f"{where}.block"),
                                     script=script, entity_id=entity_id, repeat=repeat,
-                                    repeat_from=repeat_from, kind=screen, **powers))
+                                    repeat_from=repeat_from, kind=screen,
+                                    is_minion=_bool(enemy.get("is_minion", False), f"{where}.is_minion"),
+                                    on_minion_death_script=minion_script, **powers))
         phases.append(monsters)
     description = raw.get("description", "")
     if not isinstance(description, str):

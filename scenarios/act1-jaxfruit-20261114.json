@@ -14,47 +14,64 @@
       {
         "name": "打击",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
       },
       {
         "name": "打击",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
       },
       {
         "name": "防御",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
       },
       {
         "name": "防御",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
       },
       {
         "name": "防御",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
       },
       {
         "name": "防御",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
       },
       {
         "name": "痛击",
         "cost": 2,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
       },
       {
         "name": "黑暗之拥+",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1
       },
       {
         "name": "耸肩无视",
         "cost": 1,
-        "target_type": "AnyEnemy"
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 8
       }
     ],
     "hand": [

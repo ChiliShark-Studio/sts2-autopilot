@@ -202,6 +202,16 @@ def _skills(state: GameState, card_names=()) -> list[dict]:
     )]
 
 
+def _boss_guide(state) -> dict:
+    """当前幕 Boss 的考试科目: 来自 Spire Codex 的社区统计."""
+    from .bosses import advice_for
+
+    profile = boss_profile(state) or {}
+    name = str(profile.get("name") or profile.get("id") or "")
+    guide = advice_for(name)
+    return guide or {}
+
+
 def situation(state: GameState, context: StrategyContext, extra_names=()) -> dict:
     """保留桥接完整效果，避免领域模型中仅存名称或缺省值造成信息丢失。"""
     player = state.raw.get("player")
@@ -227,5 +237,7 @@ def situation(state: GameState, context: StrategyContext, extra_names=()) -> dic
         "deck_report": deck_report(state),
         # 本幕 Boss 的已知机制: 选牌要针对它 (例如滑溜 -> 多段攻击).
         "act_boss": boss_profile(state),
+        # 本幕 Boss 考什么 (爆发/成长/机制) 与入场血量建议.
+        "boss_guide": _boss_guide(state),
         "simulation_available": False,
     }

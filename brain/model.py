@@ -105,6 +105,8 @@ class Card:
     absorb_attack: bool = False
     # 群体伤害: 评分时按多目标折算.
     aoe: bool = False
+    # 与我一战！: 被打中的敌人获得的力量 (副作用).
+    enemy_strength: int = 0
     # 以生命为费用 (放血: 失去 3 点生命).
     hp_cost: int = 0
     # 每回合开始获得的能量 (薪火之源); 价值在后续回合.
@@ -178,6 +180,7 @@ class Card:
             cruelty=parsed.get("cruelty", 0.0),
             absorb_attack=parsed.get("absorb_attack", False),
             aoe=parsed.get("aoe", False),
+            enemy_strength=parsed.get("enemy_strength", 0),
             hp_cost=parsed.get("hp_cost", 0),
             per_turn_energy=parsed.get("per_turn_energy", 0),
             future_block_turns=parsed.get("future_block_turns", 0),

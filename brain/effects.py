@@ -47,6 +47,8 @@ _BODY_SLAM = re.compile(r"当前格挡值?\s*的伤害")
 _PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点伤害")
 # 残酷: "有易伤状态的敌人额外受到25%的伤害" (百分比).
 _CRUELTY = re.compile(r"易伤[^。]*?额外受到\s*(\d+)\s*%")
+# 与我一战！: "该敌人获得N点力量" —— 给目标加力量, 是副作用.
+_ENEMY_STRENGTH = re.compile(r"该敌人获得\s*(\d+)\s*点力量")
 # 灰烬打击: "你的消耗牌堆中每有一张牌，伤害增加3。"
 _PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
 # 痛殴: "造成4点伤害两次。 消耗...随机一张攻击牌，并将它的伤害添加给这张牌."
@@ -286,6 +288,8 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "plated": _first(_PLATED, desc),
         # 残酷: 易伤敌人额外受伤的倍率 (0.25 = 再多 25%).
         "cruelty": _first(_CRUELTY, desc) / 100,
+        # 与我一战！: 给被打的目标加力量 (副作用), 目标选择要避开它会变强的情况.
+        "enemy_strength": _first(_ENEMY_STRENGTH, desc),
         # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
         "body_slam": bool(_BODY_SLAM.search(desc)),
         # 欺凌 / 灰烬打击: 伤害随易伤层数或消耗堆成长.

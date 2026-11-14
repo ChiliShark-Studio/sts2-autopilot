@@ -49,6 +49,26 @@ class EnemyRule:
         """
         return 0
 
+    def required_card(self, state) -> str:
+        """这一回合必须先打出的牌名; 空字符串表示没有强制要求.
+
+        用于"胜负条件不在血量上"的机制: 无厌沙虫的沙坑归零会直接吞掉玩家,
+        这时输出再高也没用, 必须先打出狂乱逃离。
+        """
+        return ""
+
+    def minion_death_penalty(self, before, after) -> float:
+        """杀死这个 Boss 的爪牙后, 是否反而让它变强; 返回要扣掉的评分."""
+        return 0.0
+
+    def buff_on_others(self) -> int:
+        """每回合给爪牙增加的力量 (女王): 用来把爪牙标成在变强."""
+        return 0
+
+    def steady_block(self) -> int:
+        """每回合固定获得的格挡 (女王 +20): 打它要先削这么多, 收益打折."""
+        return 0
+
     def matches(self, enemy) -> bool:
         """实体 id 形如 CEREMONIAL_BEAST_0, 因此按"id + 下划线后缀"匹配."""
         entity_id = getattr(enemy, "entity_id", "") or ""
@@ -105,6 +125,92 @@ class ShimmeringJaxfruitRule(EnemyRule):
         return 0
 
 
+class TheInsatiableRule(EnemyRule):
+    """无厌沙虫 (THE_INSATIABLE): 沙坑倒计时归零 = 立刻死亡, 与血量无关.
+
+    证据 (灰机 wiki 无厌沙虫, 2026-11 版本):
+      * 第一回合「液化地面」: 获得 4 层沙坑, 抽牌堆与弃牌堆各加入 3 张狂乱逃离;
+      * 沙坑每回合 -1, 归零时角色被吞下直接死亡,
+        瓶中精灵 / 蜥蜴尾巴这类免死效果都救不了;
+      * 狂乱逃离 (状态牌): 打出后沙坑 +1, 但每打出一次, 之后它的耗能 +1;
+      * 行为循环: 液化地面 -> 撕扯 (8x2) -> 前扑啃咬 (28) -> 分泌唾液 (+2 力量) -> 撕扯...
+    所以这一战不是"打到 0 血", 而是"沙坑见底前必须逃离"。
+    """
+
+    ids = ("THE_INSATIABLE",)
+    names = ("无厌沙虫",)
+    # 沙坑能力在玩家身上的 id 与显示名.
+    sandpit_powers = ("SAND_PIT_POWER", "SAND_PIT", "沙坑")
+    escape_cards = ("狂乱逃离", "FRENZY_ESCAPE")
+    # 沙坑剩这么多时开始逃离. 不能卡在 1~2 才动:
+    #   * 狂乱逃离每打出一张, 之后所有狂乱逃离的耗能 +1,
+    #     卡到最后一刻可能出现"手里这张费已经不够"的情况;
+    #   * 沙坑见底前如果手里恰好没有狂乱逃离, 也没有第二次机会。
+    # 留 3 层缓冲: 多花 1 次逃离的代价, 换"永远来得及"。
+    danger_threshold = 3
+
+    def sandpit(self, state):
+        """玩家身上的沙坑层数; 没有这个能力返回 None.
+
+        返回 None 而不是 0: "没有沙坑" 和 "沙坑已经见底" 是两件相反的事,
+        混在一起会让规则在没有沙坑的战斗里也一直要求打出狂乱逃离。
+        """
+        powers = getattr(getattr(state, "player", None), "powers", None) or {}
+        for key in self.sandpit_powers:
+            value = powers.get(key)
+            if isinstance(value, int):
+                return value
+        return None
+
+    def required_card(self, state) -> str:
+        sandpit = self.sandpit(state)
+        if sandpit is None:
+            return ""
+        return self.escape_cards[0] if sandpit <= self.danger_threshold else ""
+
+    def escape_in_hand(self, state):
+        """手里可打出的狂乱逃离; 没有返回 None."""
+        battle = getattr(state, "battle", None)
+        if battle is None:
+            return None
+        for card in battle.hand:
+            if card.name.rstrip("+") in self.escape_cards and card.can_play:
+                return card
+        return None
+
+
+class QueenRule(EnemyRule):
+    """女王 (QUEEN): 爪牙存活时她不攻击, 但每回合给爪牙 +1 力量、自己 +20 格挡.
+
+    证据 (灰机 wiki 女王, 2026-11 版本):
+      * 开局场上有一只爪牙 火炬头聚合体 (199 血, 冲撞 18 x2 / 光束 8x3 循环);
+      * 只要聚合体在场: 女王第 1 回合给玩家 3 层魂缚锁链, 第 2 回合给 99 层
+        脆弱 / 虚弱 / 易伤, 第 3 回合起永远用"为我尽力燃烧吧":
+        **聚合体 +1 力量、女王自己 +20 格挡**, 她自己不攻击;
+      * 聚合体死亡 -> 女王立刻激怒 (+2 力量), 之后 将头砍下 (3x5) / 处决 (15) 循环。
+
+    因此这一战的核心不是"打谁", 而是两个资源:
+      * 聚合体每回合变强 -> 拖不得, 而且它才是伤害来源;
+      * 女王每回合 20 格挡 -> 打她等于先削 20 点, 不适合当首要目标。
+    优先处理会成长的爪牙, 女王留到爪牙死后集中输出, 是这套机制的顺势打法。
+    """
+
+    ids = ("QUEEN",)
+    names = ("女王",)
+    # 女王在爪牙存活时每回合给自己多少格挡.
+    steady_block_per_turn = 20
+    # 女王每回合给爪牙加多少力量.
+    minion_strength_per_turn = 1
+
+    def buff_on_others(self) -> int:
+        """每回合给爪牙增加的力量: 用来把爪牙标成"在变强"."""
+        return self.minion_strength_per_turn
+
+    def steady_block(self) -> int:
+        """每回合固定获得的格挡: 用于评估"打它有多亏"."""
+        return self.steady_block_per_turn
+
+
 class RuleBook:
     """敌人 id → 规则的注册表; 默认不含任何规则."""
 
@@ -113,13 +219,62 @@ class RuleBook:
 
     @classmethod
     def with_defaults(cls) -> "RuleBook":
-        return cls([CeremonialBeastRule(), ShimmeringJaxfruitRule()])
+        return cls([CeremonialBeastRule(), ShimmeringJaxfruitRule(), TheInsatiableRule(),
+                    QueenRule()])
 
     def rule_for(self, enemy) -> Optional[EnemyRule]:
         for rule in self.rules:
             if rule.matches(enemy):
                 return rule
         return None
+
+    def minion_death_penalty(self, before, after) -> float:
+        """击杀爪牙的总惩罚 (来自各 Boss 规则)."""
+        total = 0.0
+        for rule in self.rules:
+            total += rule.minion_death_penalty(before, after)
+        return total
+
+    def minion_growth(self, state) -> int:
+        """Boss 每回合给爪牙加的力量: 有爪牙存活时, 爪牙算"在变强"."""
+        battle = getattr(state, "battle", None)
+        if battle is None:
+            return 0
+        minions = [e for e in battle.alive_enemies if getattr(e, "powers", {}).get("MINION_POWER")]
+        if not minions:
+            return 0
+        growth = 0
+        for enemy in battle.alive_enemies:
+            rule = self.rule_for(enemy)
+            if rule is not None:
+                growth += rule.buff_on_others()
+        return growth
+
+    def steady_block(self, state) -> int:
+        """当前存活敌人里最大的"每回合格挡" (女王 20): 打它要先削这么多."""
+        battle = getattr(state, "battle", None)
+        if battle is None:
+            return 0
+        total = 0
+        for enemy in battle.alive_enemies:
+            rule = self.rule_for(enemy)
+            if rule is not None:
+                total += rule.steady_block()
+        return total
+
+    def required_card(self, state) -> tuple[str, object]:
+        """本回合是否必须打出某张牌; 返回 (牌名, 规则) 或 ("", None)."""
+        battle = getattr(state, "battle", None)
+        if battle is None:
+            return "", None
+        for enemy in battle.alive_enemies:
+            rule = self.rule_for(enemy)
+            if rule is None:
+                continue
+            name = rule.required_card(state)
+            if name:
+                return name, rule
+        return "", None
 
     def stun_bonus(self, sim, enemy_index: int) -> float:
         """该敌人当前是否已经在击晕阈值以下; 返回加成分数 (跨阈值才计)."""

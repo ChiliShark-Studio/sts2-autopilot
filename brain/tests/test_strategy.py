@@ -391,6 +391,14 @@ class StrategyContextTests(unittest.TestCase):
         self.assertEqual([item["topic"] for item in relevant_notes(["残酷"])],
                          ["残酷 + 易伤"])
 
+    def test_prompt_drafts_by_boss_check(self):
+        # 选牌要服务本幕 Boss 的考科 (Spire Codex 80 万局统计).
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("boss_guide.check", prompt)
+        self.assertIn("格挡/伤害", prompt)
+        self.assertIn("成长", prompt)
+        self.assertIn("入场血量", prompt)
+
     def test_prompt_has_deck_size_rule(self):
         # 复盘: 第 3 层、8 张牌组却跳过了卡牌奖励, 理由是"不稀释"——薄牌组谈不上稀释.
         prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))

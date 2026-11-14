@@ -1,0 +1,319 @@
+{
+  "name": "第三幕·女王残局（用户获胜局的起点复刻）",
+  "description": "只剩女王 166 血、玩家 40/84 血、力量 5 且身上有 99 层脆弱/虚弱/易伤。女王行为按 godot.log: 提线木偶 -> 你是我的了 -> 激怒 -> 将头砍下。用于回答'为什么 agent 打不出用户那种 4 回合收尾'。",
+  "seed": 0,
+  "max_turns": 30,
+  "screen": "boss",
+  "player": {
+    "hp": 40,
+    "max_hp": 84,
+    "max_energy": 5,
+    "energy": 5,
+    "block": 0,
+    "status": [
+      {
+        "id": "STRENGTH_POWER",
+        "name": "力量",
+        "amount": 5
+      },
+      {
+        "id": "FRAIL_POWER",
+        "name": "脆弱",
+        "amount": 99
+      },
+      {
+        "id": "WEAK_POWER",
+        "name": "虚弱",
+        "amount": 99
+      },
+      {
+        "id": "VULNERABLE_POWER",
+        "name": "易伤",
+        "amount": 99
+      }
+    ],
+    "deck": [
+      {
+        "name": "防御+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "痛击+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "旋风斩+",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "cost_x": true,
+        "damage": 8,
+        "hits": 1
+      },
+      {
+        "name": "武装",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "双重打击+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 7,
+        "hits": 1
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 8
+      },
+      {
+        "name": "耸肩无视",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 8
+      },
+      {
+        "name": "劫掠",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "预备打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "焚烧",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 2,
+        "hits": 4
+      },
+      {
+        "name": "与我一战！+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "damage": 6,
+        "hits": 2
+      },
+      {
+        "name": "燃烧+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "突破+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 13,
+        "hits": 1
+      },
+      {
+        "name": "劫掠+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "战栗",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "亮剑",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "damage": 5,
+        "hits": 1
+      },
+      {
+        "name": "剑柄打击+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "剑柄打击",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 10,
+        "hits": 1
+      },
+      {
+        "name": "势不可当+",
+        "cost": 2,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "武装",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1,
+        "block": 5
+      },
+      {
+        "name": "岩石铠甲+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "疑虑",
+        "cost": 0,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "主宰+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "劫掠",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 9,
+        "hits": 1
+      },
+      {
+        "name": "凶恶+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "hits": 1
+      },
+      {
+        "name": "飞剑回旋镖+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 3,
+        "hits": 3
+      },
+      {
+        "name": "闪电霹雳+",
+        "cost": 1,
+        "target_type": "AnyEnemy",
+        "damage": 7,
+        "hits": 1
+      }
+    ],
+    "hand": [
+      {
+        "name": "闪电霹雳+",
+        "cost": 1,
+        "damage": 7,
+        "hits": 1,
+        "target_type": "AllEnemies"
+      },
+      {
+        "name": "飞剑回旋镖+",
+        "cost": 1,
+        "damage": 3,
+        "hits": 4,
+        "target_type": "AnyEnemy"
+      },
+      {
+        "name": "焚烧",
+        "cost": 1,
+        "damage": 2,
+        "hits": 4,
+        "target_type": "AllEnemies"
+      },
+      {
+        "name": "防御",
+        "cost": 1,
+        "block": 5,
+        "target_type": "Self"
+      },
+      {
+        "name": "打击",
+        "cost": 1,
+        "damage": 6,
+        "hits": 1,
+        "target_type": "AnyEnemy"
+      }
+    ]
+  },
+  "relics": [
+    {
+      "name": "燃烧之血",
+      "description": "战斗结束时回复 6 点生命。",
+      "effects": {}
+    }
+  ],
+  "enemies": [
+    {
+      "entity_id": "QUEEN_0",
+      "name": "女王",
+      "hp": 166,
+      "max_hp": 400,
+      "intents": [
+        {
+          "type": "custom",
+          "handler": "apply_chains",
+          "params": {}
+        },
+        {
+          "type": "custom",
+          "handler": "queen_debuffs",
+          "params": {}
+        },
+        {
+          "type": "buff",
+          "strength": 2
+        },
+        {
+          "type": "attack",
+          "damage": 3,
+          "hits": 5
+        },
+        {
+          "type": "attack",
+          "damage": 15
+        }
+      ],
+      "repeat": true
+    }
+  ]
+}

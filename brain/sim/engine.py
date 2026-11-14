@@ -68,6 +68,8 @@ class Monster:
     slow: int = 0
     # 领地: 自己回合结束时获得 X 点力量 (多尼斯异鸟).
     territorial: int = 0
+    # 仪式 (RITUAL_POWER): 自己回合结束时获得 X 点力量, 邪教徒类每回合都在涨.
+    ritual: int = 0
     # 硬化外壳: 每回合最多失去这么多生命; 0 表示没有上限.
     # 状态 (HARDENED_SHELL_POWER) 给的是本回合剩余额度, 这里同时保存上限供新回合重置.
     hp_loss_cap: int = 0
@@ -77,6 +79,12 @@ class Monster:
     skittish_used: bool = False
     # 战斗类型: 战斗算法按它调整血量权重 (小怪更珍惜生命).
     kind: str = "monster"
+    # 爪牙: 首领死亡后离场, 首领全灭即胜利.
+    is_minion: bool = False
+    # 爪牙死亡后切换的行动脚本 (女王: 从"支援"切到"攻击").
+    on_minion_death_script: Optional[list[Intent]] = None
+    # 是否已经切换到该脚本, 避免重复切换.
+    minion_phase: bool = False
 
     def __post_init__(self) -> None:
         # 从场景文件按上限构造时, 第一回合的额度也要跟着满上.
@@ -223,6 +231,7 @@ class Fight:
                  hp: int = 70, max_hp: int = 70, max_energy: int = 3,
                  draw_per_turn: int = 5, seed: int = 0, energy: Optional[int] = None,
                  block: int = 0, strength: int = 0, dexterity: int = 0,
+                 player_frail: int = 0, player_weak: int = 0, player_vulnerable: int = 0,
                  following_phases: Optional[list[list[Monster]]] = None,
                  starting_hand: Optional[list[DeckCard]] = None,
                  relic_first_block_double: bool = False,
@@ -281,6 +290,14 @@ class Fight:
         self.ringing_pending = 0
         self.ringing_active = False
         self.turn_cards_played = 0
+        # 玩家身上的负面状态 (女王战的 99 层脆弱/虚弱/易伤).
+        self.player_weak = player_weak
+        self.player_frail = player_frail
+        self.player_vulnerable = player_vulnerable
+        # 拘束: 每回合最先抽到的 N 张牌只能打出其中 1 张.
+        self.chained_draw = 0
+        self.chained_indices: set[int] = set()
+        self.chained_played = False
 
     @property
     def per_turn_strength(self) -> int:
@@ -301,6 +318,15 @@ class Fight:
                 self.draw_pile, self.discard = self.discard, []
                 self.rng.shuffle(self.draw_pile)
             self.hand.append(self.draw_pile.pop())
+
+    def _apply_chains(self) -> None:
+        """拘束: 本回合最先抽到的 N 张牌只能打出其中一张."""
+        self.chained_indices = set()
+        self.chained_played = False
+        if not self.chained_draw:
+            return
+        for index in range(min(self.chained_draw, len(self.hand))):
+            self.chained_indices.add(index)
 
     def start_turn(self) -> None:
         if self._started:
@@ -327,6 +353,7 @@ class Fight:
             self._prefilled_hand = False
         else:
             self._draw(self.draw_per_turn)
+        self._apply_chains()
 
     # -- 动作处理 --
     def play(self, hand_index: int, target: Optional[str] = None) -> bool:
@@ -343,7 +370,13 @@ class Fight:
         # 昏眩: 本回合已经出过一张牌, 不能再出.
         if self.ringing_active and self.turn_cards_played >= 1:
             return False
+        # 拘束: 被锁的牌本回合只能打出一张.
+        if hand_index in self.chained_indices and self.chained_played:
+            return False
         self.energy -= cost
+        if hand_index in self.chained_indices:
+            self.chained_played = True
+            self.chained_indices.discard(hand_index)
         self.hand.pop(hand_index)
         self.cards_played += 1
         self.turn_cards_played += 1
@@ -384,6 +417,9 @@ class Fight:
                     base_damage += card.per_exhaust * self.exhausted
                 for _ in range(hits):
                     dmg = max(0, base_damage + self.strength)
+                    # 玩家虚弱: 攻击伤害 -25%.
+                    if self.player_weak:
+                        dmg = int(dmg * 0.75)
                     if monster.vulnerable:
                         # 残忍提高易伤额外倍率.
                         dmg = int(dmg * (1.5 + self.cruelty))
@@ -419,6 +455,9 @@ class Fight:
                 doubled = True
             if doubled:
                 gain *= 2
+            # 玩家脆弱: 从卡牌获得的格挡 -25%.
+            if self.player_frail:
+                gain = int(gain * 0.75)
             self.block += gain
             # 主宰: 每次获得格挡时对敌人造成伤害.
             if self.juggernaut:
@@ -518,6 +557,9 @@ class Fight:
             # 领地: 自己回合结束时累积力量.
             if monster.territorial:
                 monster.strength += monster.territorial
+            # 仪式: 邪教徒每回合结束固定加力量.
+            if monster.ritual:
+                monster.strength += monster.ritual
             monster.step += 1
 
             # 负面状态在敌人行动结束时减少持续回合.
@@ -526,8 +568,20 @@ class Fight:
             if monster.weak:
                 monster.weak -= 1
 
+        # 爪牙死亡: 首领切换到第二阶段脚本 (女王: 从支援转为攻击).
+        if not any(m.alive and m.is_minion for m in self.monsters):
+            for monster in self.monsters:
+                if (monster.alive and monster.on_minion_death_script is not None
+                        and not monster.minion_phase):
+                    monster.script = monster.on_minion_death_script
+                    monster.step = 0
+                    monster.minion_phase = True
+
     def _take_damage(self, damage: int) -> None:
         """感染和敌方攻击共用格挡结算, 仅统计实际失去的生命."""
+        # 玩家身上的易伤: 受到的攻击伤害 x1.5 (女王第 2 回合给 99 层).
+        if self.player_vulnerable:
+            damage = int(damage * 1.5)
         absorbed = min(self.block, damage)
         self.block -= absorbed
         taken = max(0, damage - absorbed)
@@ -541,7 +595,8 @@ class Fight:
 
     @property
     def won(self) -> bool:
-        return self.hp > 0 and not any(m.alive for m in self.monsters) and not self.following_phases
+        return (self.hp > 0 and not any(m.alive and not m.is_minion for m in self.monsters)
+                and not self.following_phases)
 
     # -- 桥接格式转换 --
     def to_state(self) -> dict[str, Any]:
@@ -571,6 +626,13 @@ class Fight:
                 "description": card.description or (f"造成{card.damage}点伤害X次。" if card.hits_x else ""),
             })
 
+        # 拘束: 本回合已经打出过一张被锁的牌, 其余被锁的牌就不能再打.
+        if self.chained_played:
+            for entry in hand:
+                if entry["index"] in self.chained_indices:
+                    entry["can_play"] = False
+                    entry["unplayable_reason"] = "Chained"
+
         enemies = []
         for i, monster in enumerate(self.monsters):
             if not monster.alive:
@@ -587,9 +649,15 @@ class Fight:
 
                 intents = CUSTOM_INTENTS[intent.handler]["preview"](self, monster, intent.params)
             else:
+                # 导出"已结算"的伤害: 与游戏意图上的数字一致 (含力量 / 虚弱 / 玩家易伤),
+                # 否则搜索会再乘一次易伤, 把每回合 18 点高估成 27 点.
+                resolved = monster.attack_damage()
+                # 与游戏一致: 导出的是最终伤害 (含我方易伤), 搜索侧不再叠加.
+                if self.player_vulnerable:
+                    resolved = int(resolved * 1.5)
                 intents = [{
                     "type": "Attack" if intent.type == "attack" else intent.type.title(),
-                    "damage": monster.attack_damage(),
+                    "damage": resolved,
                     "hits": intent.hits,
                 }]
             if intent.strength and intent.type != "buff":
@@ -622,6 +690,15 @@ class Fight:
                            if self.strength else []) + (
                            [{"id": "DEXTERITY_POWER", "name": "敏捷", "amount": self.dexterity}]
                            if self.dexterity else []) + (
+                           # 女王战的三重 debuff: 不导出的话搜索看不到,
+                           # 会以为攻击和格挡都是满值、来袭伤害也没变高.
+                           [{"id": "FRAIL_POWER", "name": "脆弱", "amount": self.player_frail}]
+                           if self.player_frail else []) + (
+                           [{"id": "WEAK_POWER", "name": "虚弱", "amount": self.player_weak}]
+                           if self.player_weak else []) + (
+                           [{"id": "VULNERABLE_POWER", "name": "易伤",
+                             "amount": self.player_vulnerable}]
+                           if self.player_vulnerable else []) + (
                            [{"id": "RINGING_POWER", "name": "昏眩", "amount": 1,
                              "description": "本回合你只能打出1张牌。"}]
                            if self.ringing_active else []) + power_statuses(self),

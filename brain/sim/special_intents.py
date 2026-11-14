@@ -144,7 +144,84 @@ def _execute_sunder(fight: Fight, monster: Monster, params: dict[str, Any]) -> N
         fight.discard.append(replace(WOUND))
 
 
+
+
+# --- 女王: 拘束 (Chains of Binding) ---
+# 游戏内文本: 每回合最先抽到的 3 张牌被拘束, 每回合只能打出其中 1 张, 回合结束解除.
+CHAINS_PER_TURN = 3
+
+
+def _validate_chains(params: Any) -> None:
+    if params not in (None, {}):
+        raise ValueError("apply_chains 不接受参数")
+
+
+def _preview_chains(fight, monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "Debuff", "label": "拘束",
+             "description": f"每回合最先抽到的 {CHAINS_PER_TURN} 张牌只能打出 1 张。"}]
+
+
+def _execute_chains(fight, monster, params: dict[str, Any]) -> None:
+    fight.chained_draw = CHAINS_PER_TURN
+
+
+# --- 女王: 你是我的了 (99 层脆弱 / 虚弱 / 易伤) ---
+QUEEN_DEBUFF_LAYERS = 99
+
+
+def _validate_queen_debuffs(params: Any) -> None:
+    if params not in (None, {}):
+        raise ValueError("queen_debuffs 不接受参数")
+
+
+def _preview_queen_debuffs(fight, monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "Debuff", "label": "你是我的了",
+             "description": f"获得 {QUEEN_DEBUFF_LAYERS} 层脆弱 / 虚弱 / 易伤。"}]
+
+
+def _execute_queen_debuffs(fight, monster, params: dict[str, Any]) -> None:
+    fight.player_frail = QUEEN_DEBUFF_LAYERS
+    fight.player_weak = QUEEN_DEBUFF_LAYERS
+    fight.player_vulnerable = QUEEN_DEBUFF_LAYERS
+
+
+# --- 女王: 为我尽力燃烧吧 (聚合体 +1 力量, 自己 +20 格挡) ---
+QUEEN_SUPPORT_BLOCK = 20
+
+
+def _validate_queen_support(params: Any) -> None:
+    if params not in (None, {}):
+        raise ValueError("queen_support 不接受参数")
+
+
+def _preview_queen_support(fight, monster, params: dict[str, Any]) -> list[dict[str, Any]]:
+    return [{"type": "Buff", "label": "为我尽力燃烧吧",
+             "description": f"聚合体 +1 力量, 女王获得 {QUEEN_SUPPORT_BLOCK} 点格挡。"}]
+
+
+def _execute_queen_support(fight, monster, params: dict[str, Any]) -> None:
+    monster.block += QUEEN_SUPPORT_BLOCK
+    for other in fight.monsters:
+        if other.alive and other is not monster:
+            other.strength += 1
+
+
 CUSTOM_INTENTS = {
+    "apply_chains": {
+        "validate": _validate_chains,
+        "preview": _preview_chains,
+        "execute": _execute_chains,
+    },
+    "queen_debuffs": {
+        "validate": _validate_queen_debuffs,
+        "preview": _preview_queen_debuffs,
+        "execute": _execute_queen_debuffs,
+    },
+    "queen_support": {
+        "validate": _validate_queen_support,
+        "preview": _preview_queen_support,
+        "execute": _execute_queen_support,
+    },
     "add_infection": {
         "validate": validate_infection,
         "preview": preview_infection,
