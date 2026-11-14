@@ -391,6 +391,13 @@ class StrategyContextTests(unittest.TestCase):
         self.assertEqual([item["topic"] for item in relevant_notes(["残酷"])],
                          ["残酷 + 易伤"])
 
+    def test_prompt_keeps_a_cross_act_baseline(self):
+        # boss_guide 只有本幕 Boss, 后两幕未知: 不能为单一 Boss 过度特化.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("后两幕未知", prompt)
+        self.assertIn("通用底线", prompt)
+        self.assertIn("第二幕结束前", prompt)
+
     def test_prompt_drafts_by_boss_check(self):
         # 选牌要服务本幕 Boss 的考科 (Spire Codex 80 万局统计).
         prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
