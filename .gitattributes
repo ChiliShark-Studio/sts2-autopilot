@@ -1,0 +1,7 @@
+# 在 macOS/Linux 上直接执行, 必须保持 LF, 否则报 bad interpreter: ^M
+*.sh            text eol=lf
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+*.json          text eol=lf
+*.py            text eol=lf
+*.md            text eol=lf

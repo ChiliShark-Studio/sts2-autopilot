@@ -125,6 +125,10 @@ _PYRE = {"薪火之源", "PYRE_POWER"}
 _RITUAL = {"仪式", "RITUAL_POWER"}
 # 魂缚锁链 (女王): 每回合最先抽到的 N 张牌只能打出 1 张.
 _CHAINS = {"魂缚锁链", "CHAINS_OF_BINDING_POWER", "CHAINS_OF_BINDING"}
+# 撕裂: 每次因牌掉血获得力量.
+_RUPTURE_POWER = {"撕裂", "RUPTURE_POWER", "RUPTURE"}
+# 巨像: 有易伤的敌人对我们伤害降低 (状态里给的是百分比).
+_VULN_DAMAGE_DOWN_POWER = {"巨像", "COLOSSUS_POWER", "COLOSSUS"}
 _SETUP_STRENGTH = {"预备打击", "SETUP_STRIKE_POWER"}
 # 幻象 (寄生惧魔): 死亡时下回合满血复活, 打它等于白打.
 _REVIVES = {"幻象", "illusion", "ILLUSION_POWER"}
@@ -161,6 +165,9 @@ def _card_value(card: Card) -> float:
     value += card.strength * 4 + card.dexterity * 3 + card.plated * 2
     value += card.cruelty * 20
     value -= card.enemy_strength * 4
+    value += card.rupture * 8
+    value += card.enemy_strength_down * 2 + card.draw_on_vulnerable * 6
+    value += card.vuln_damage_reduction * 10
     return value
 
 
@@ -294,6 +301,10 @@ class _Sim:
     play_limit: int = 99
     # 抢输出模式: 敌人在叠力量, 不再考虑纯格挡牌.
     skip_block: bool = False
+    # 撕裂: 每次因牌失去生命值时获得这么多力量.
+    rupture: int = 0
+    # 巨像: 有易伤的敌人对我们造成的伤害降低比例.
+    vuln_damage_reduction: float = 0.0
     # 拘束: 这些下标被锁, 本回合只能打出其中 1 张.
     chained: frozenset[int] = frozenset()
     chained_played: bool = False
@@ -386,6 +397,8 @@ class _Sim:
             no_block=_power(player.powers, _NO_BLOCK) > 0,
             # 昏眩: 本回合只能打出 1 张牌, 搜索必须按这个上限规划.
             play_limit=1 if _power(player.powers, _RINGING) > 0 else 99,
+            rupture=_power(player.powers, _RUPTURE_POWER),
+            vuln_damage_reduction=_power(player.powers, _VULN_DAMAGE_DOWN_POWER) / 100,
             chained=frozenset(range(min(_power(player.powers, _CHAINS),
                                               len(battle.hand)))),
             enemies=[
@@ -612,9 +625,36 @@ class _Sim:
             for hit_target in targets[:1]:
                 if hit_target.incoming > 0:
                     hit_target.incoming += card.enemy_strength
+        # 凌虐 / 黑暗镣铐: 让目标失去力量 (本回合).
+        if card.enemy_strength_down and targets:
+            for hit_target in targets[:1]:
+                # 实际扣掉的是它现有的力量 (它可能本来就没那么多).
+                removed = min(hit_target.strength, card.enemy_strength_down)
+                hit_target.strength -= removed
+                if hit_target.incoming > 0:
+                    hit_target.incoming = max(0, hit_target.incoming - removed)
+        # 巨像: 之后有易伤的敌人打我们更轻.
+        if card.vuln_damage_reduction:
+            self.vuln_damage_reduction = max(self.vuln_damage_reduction,
+                                             card.vuln_damage_reduction)
+        # 凶恶: 给易伤时抽牌. 单回合模型抽不了牌, 按抽到牌的期望价值折现.
+        if card.draw_on_vulnerable:
+            self.future_value += (card.draw_on_vulnerable * self.expected_draw_value()
+                                  * self.future_turns() * multiplier)
+        # 撕裂: 打出后不立即加力量, 后续每次因牌掉血才加.
+        if card.rupture:
+            self.rupture += card.rupture * multiplier
+            # 价值取决于牌库里有多少"以生命为费用"的牌: 按每回合抽到的期望折算.
+            self_harm = sum(1 for c in self.deck if c.hp_cost or c.name in _TEMPO_HP_CARDS)
+            per_turn = 5.0 * self_harm / max(1, len(self.deck))
+            self.future_value += (card.rupture * per_turn * self.future_turns()
+                                  * multiplier * self.hp_weight() * 4)
         # 以生命为费用: 放血之外的掉血牌也要付这个代价.
         if card.hp_cost:
             self.hp = max(0, self.hp - card.hp_cost)
+            # 撕裂: 因牌失去生命值时获得力量.
+            if self.rupture:
+                self.strength += self.rupture
 
         for enemy in targets:
             enemy.vulnerable += card.vulnerable
@@ -788,7 +828,13 @@ class _Sim:
         # 意图里的数字已经是最终伤害: 含敌人力量、我方虚弱/易伤等全部修正.
         # 核对: 女王基础 3x5 + 力量 3 -> 每段 6, 我方易伤 x1.5 -> 9x5 = 45,
         # 游戏显示的就是 45; 本地再乘一次会变成 67.
-        incoming = sum(e.incoming for e in alive)
+        incoming = 0
+        for enemy in alive:
+            damage = enemy.incoming
+            # 巨像: 有易伤的敌人对我们伤害降低 50%.
+            if self.vuln_damage_reduction and enemy.vulnerable:
+                damage = int(damage * (1 - self.vuln_damage_reduction))
+            incoming += damage
         # 覆甲在回合结束时提供格挡, 与普通格挡一样用于抵挡本回合的伤害.
         covered = min(self.block + self.plated, incoming)
         unblocked = incoming - covered

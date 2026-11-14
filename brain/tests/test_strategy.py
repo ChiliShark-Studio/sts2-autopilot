@@ -391,6 +391,18 @@ class StrategyContextTests(unittest.TestCase):
         self.assertEqual([item["topic"] for item in relevant_notes(["残酷"])],
                          ["残酷 + 易伤"])
 
+    def test_prompt_rests_before_boss_below_entry_fee(self):
+        # 复盘: 28/68 血进第一幕 Boss (入场费 40), 篝火却选了升级.
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("必须休息", prompt)
+        self.assertIn("entry_hp", prompt)
+
+    def test_prompt_reserves_removal_gold(self):
+        # 复盘: 111 金买了燃烧(72)+耸肩(24), 剩 15 金删不起牌 (13 张牌 4 打击).
+        prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))
+        self.assertIn("可花金额", prompt)
+        self.assertIn("删牌 > 引擎", prompt)
+
     def test_prompt_keeps_a_cross_act_baseline(self):
         # boss_guide 只有本幕 Boss, 后两幕未知: 不能为单一 Boss 过度特化.
         prompt = character_prompt(GameState.parse({"player": {"character": "铁甲战士"}}))

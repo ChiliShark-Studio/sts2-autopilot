@@ -107,6 +107,14 @@ class Card:
     aoe: bool = False
     # 与我一战！: 被打中的敌人获得的力量 (副作用).
     enemy_strength: int = 0
+    # 撕裂: 每次因牌失去生命值时获得的力量.
+    rupture: int = 0
+    # 凌虐 / 黑暗镣铐: 让目标失去的力量.
+    enemy_strength_down: int = 0
+    # 凶恶: 给敌人上易伤时抽的牌数 (触发式).
+    draw_on_vulnerable: int = 0
+    # 巨像: 有易伤的敌人对我们造成的伤害降低比例 (0.5 = 50%).
+    vuln_damage_reduction: float = 0.0
     # 以生命为费用 (放血: 失去 3 点生命).
     hp_cost: int = 0
     # 每回合开始获得的能量 (薪火之源); 价值在后续回合.
@@ -181,6 +189,10 @@ class Card:
             absorb_attack=parsed.get("absorb_attack", False),
             aoe=parsed.get("aoe", False),
             enemy_strength=parsed.get("enemy_strength", 0),
+            rupture=parsed.get("rupture", 0),
+            enemy_strength_down=parsed.get("enemy_strength_down", 0),
+            draw_on_vulnerable=parsed.get("draw_on_vulnerable", 0),
+            vuln_damage_reduction=parsed.get("vuln_damage_reduction", 0.0),
             hp_cost=parsed.get("hp_cost", 0),
             per_turn_energy=parsed.get("per_turn_energy", 0),
             future_block_turns=parsed.get("future_block_turns", 0),

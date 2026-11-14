@@ -42,7 +42,15 @@ Or set it once in your PowerShell profile:
     exit 1
 }
 
-$dllDir = Join-Path $GameDir "data_sts2_windows_x86_64"
+# Pick the managed-assembly directory by OS: on macOS the DLLs live inside the
+# .app bundle, on Linux they sit next to the game binary.
+$dllDir = if ($IsMacOS) {
+    Join-Path $GameDir "SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64"
+} elseif ($IsWindows -or $null -eq $IsWindows) {
+    Join-Path $GameDir "data_sts2_windows_x86_64"
+} else {
+    Join-Path $GameDir "data_sts2_linuxbsd_x86_64"
+}
 if (-not (Test-Path (Join-Path $dllDir "sts2.dll"))) {
     Write-Host "ERROR: Could not find sts2.dll in '$dllDir'." -ForegroundColor Red
     Write-Host "Make sure -GameDir points to the Slay the Spire 2 installation root." -ForegroundColor Red

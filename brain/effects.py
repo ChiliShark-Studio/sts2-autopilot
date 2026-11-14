@@ -49,6 +49,14 @@ _PER_VULNERABLE = re.compile(r"每有一层易伤就额外造成\s*(\d+)\s*点�
 _CRUELTY = re.compile(r"易伤[^。]*?额外受到\s*(\d+)\s*%")
 # 与我一战！: "该敌人获得N点力量" —— 给目标加力量, 是副作用.
 _ENEMY_STRENGTH = re.compile(r"该敌人获得\s*(\d+)\s*点力量")
+# 撕裂: "每当你从一张牌中失去生命值时，获得1点力量".
+_RUPTURE = re.compile(r"每当你从一张牌中失去生命值[^。]*?获得\s*(\d+)\s*点力量")
+# 凌虐 / 黑暗镣铐: "敌人在本回合失去 N 点力量".
+_ENEMY_STRENGTH_DOWN = re.compile(r"敌人(?:在本回合)?失去\s*(\d+)\s*点力量")
+# 凶恶: "每当你给予易伤时，抽 N 张牌".
+_DRAW_ON_VULN = re.compile(r"每当你给予易伤时[^。]*?抽\s*(\d+)\s*张")
+# 巨像: "有易伤状态的敌人对你造成的伤害降低 N%".
+_VULN_DAMAGE_DOWN = re.compile(r"有易伤状态的敌人对你造成的伤害降低\s*(\d+)\s*%")
 # 灰烬打击: "你的消耗牌堆中每有一张牌，伤害增加3。"
 _PER_EXHAUST = re.compile(r"消耗牌堆中每有一张牌[，,]?\s*伤害增加\s*(\d+)")
 # 痛殴: "造成4点伤害两次。 消耗...随机一张攻击牌，并将它的伤害添加给这张牌."
@@ -103,7 +111,8 @@ def parse_potion(description: str) -> dict[str, int]:
         "damage": _first(_DAMAGE, desc),
         "block": _first(_BLOCK, desc),
         "heal": _first(_HEAL, desc),
-        "strength": _first(_STRENGTH_GAIN, desc),
+        # 触发式的 "获得N点力量" (撕裂) 不算立即加力量.
+        "strength": 0 if _RUPTURE.search(desc) else _first(_STRENGTH_GAIN, desc),
         "dexterity": _first(_DEXTERITY_GAIN, desc),
         "vulnerable": _first(_VULN, desc) or _first(_BIND_VULN, desc),
         "weak": _first(_WEAK, desc) or _first(_BIND_WEAK, desc),
@@ -290,6 +299,14 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "cruelty": _first(_CRUELTY, desc) / 100,
         # 与我一战！: 给被打的目标加力量 (副作用), 目标选择要避开它会变强的情况.
         "enemy_strength": _first(_ENEMY_STRENGTH, desc),
+        # 撕裂: 每次因牌掉血获得的力量 (不是打出时立即获得).
+        "rupture": _first(_RUPTURE, desc),
+        # 凌虐 / 黑暗镣铐: 让敌人失去力量.
+        "enemy_strength_down": _first(_ENEMY_STRENGTH_DOWN, desc),
+        # 凶恶: 给易伤时抽牌 (触发式, 不在打出时立即抽).
+        "draw_on_vulnerable": _first(_DRAW_ON_VULN, desc),
+        # 巨像: 对易伤敌人的减伤比例 (0.5 = 50%).
+        "vuln_damage_reduction": _first(_VULN_DAMAGE_DOWN, desc) / 100,
         # 全身撞击: 伤害等于打出时的格挡, 由搜索在结算时计算.
         "body_slam": bool(_BODY_SLAM.search(desc)),
         # 欺凌 / 灰烬打击: 伤害随易伤层数或消耗堆成长.
@@ -321,7 +338,9 @@ def parse_card(card: dict[str, Any]) -> dict[str, Any]:
         "per_turn_hp_cost": per_turn_hp_cost,
         # 能力牌 (如燃烧) 的数值只在描述里: "获得2点力量。"
         # Mod 尚未输出结构化字段, 因此这里始终尝试解析, 否则能力牌在模拟中等同空过.
-        "strength": 0 if per_turn_strength or temporary_strength else _field(card, "strength", _STRENGTH_GAIN),
+        # 触发式的 "获得N点力量" (撕裂) 不算立即加力量, 见 rupture 字段.
+        "strength": (0 if per_turn_strength or temporary_strength or _RUPTURE.search(desc)
+                     else _field(card, "strength", _STRENGTH_GAIN)),
         "per_turn_strength": per_turn_strength,
         "temporary_strength": temporary_strength,
         "dexterity": _field(card, "dexterity", _DEXTERITY_GAIN),

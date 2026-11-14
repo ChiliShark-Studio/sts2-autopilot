@@ -49,26 +49,34 @@ def audit_card(card) -> Warning | None:
     if _HITS_TWICE.search(desc) and card.hits < 2 and not card.hits_if_vulnerable:
         hints.append("描述写两段, 但 hits=1")
     if _BLOCK_TEXT.search(desc) and not (card.block or card.grants_block
-                                         or card.plated or card.per_turn_block):
-        hints.append("描述有格挡, 但 block 为 0")
+                                         or card.plated or card.per_turn_block
+                                         or card.block_per_attack):
+        hints.append("描述有格挡, 但没有任何格挡字段")
     if _DRAW_TEXT.search(desc) and not card.draw:
         hints.append("描述有抽牌, 但 draw 为 0")
     if _ENERGY_TEXT.search(desc) and not (card.energy or card.per_turn_energy
                                           or card.energy_per_attack):
         hints.append("描述提到能量, 但 energy 为 0")
-    if _STRENGTH_TEXT.search(desc) and not (card.strength or card.per_turn_strength):
-        hints.append("描述提到力量, 但 strength 为 0")
+    if _STRENGTH_TEXT.search(desc) and not (
+            card.strength or card.per_turn_strength or card.temporary_strength
+            or getattr(card, "rupture", 0) or getattr(card, "enemy_strength", 0)
+            or getattr(card, "enemy_strength_down", 0)):
+        hints.append("描述提到力量, 但没有任何力量字段")
     if _DEXTERITY_TEXT.search(desc) and not card.dexterity:
         hints.append("描述提到敏捷, 但 dexterity 为 0")
     if _PLATED_TEXT.search(desc) and not card.plated:
         hints.append("描述提到覆甲, 但 plated 为 0")
-    if _VULN_TEXT.search(desc) and not (card.vulnerable or card.per_vulnerable
-                                        or card.hits_if_vulnerable):
-        hints.append("描述提到易伤, 但 vulnerable 为 0")
+    if _VULN_TEXT.search(desc) and not (
+            card.vulnerable or card.per_vulnerable or card.hits_if_vulnerable
+            or getattr(card, "cruelty", 0) or getattr(card, "draw_on_vulnerable", 0)
+            or getattr(card, "vuln_damage_reduction", 0)):
+        hints.append("描述提到易伤, 但没有任何易伤相关字段")
     if _WEAK_TEXT.search(desc) and not card.weak:
         hints.append("描述提到虚弱, 但 weak 为 0")
-    if _EXHAUST_TEXT.search(desc) and not (card.exhaust or card.random_exhaust
-                                           or card.absorb_attack):
+    # "每当有牌被消耗" / "消耗牌堆" 是触发式效果, 不是"这张牌会被消耗".
+    if (_EXHAUST_TEXT.search(desc) and not (card.exhaust or card.random_exhaust
+                                            or card.absorb_attack)
+            and "每当" not in desc and "消耗牌堆" not in desc):
         hints.append("描述提到消耗, 但 exhaust 未标记")
 
     return Warning(card.name, tuple(hints)) if hints else None
